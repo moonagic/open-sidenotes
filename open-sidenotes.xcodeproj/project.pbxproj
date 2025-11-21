@@ -78,6 +78,7 @@
 				0803A5BE2D1ABDDB005CB5E8 /* open-sidenotes */,
 				0803A5D02D1ABDDC005CB5E8 /* open-sidenotesTests */,
 				0803A5DA2D1ABDDC005CB5E8 /* open-sidenotesUITests */,
+				08CC15CF2ED04C48001120E2 /* Frameworks */,
 				0803A5BD2D1ABDDB005CB5E8 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -90,6 +91,13 @@
 				0803A5D72D1ABDDC005CB5E8 /* open-sidenotesUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		08CC15CF2ED04C48001120E2 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -195,6 +203,8 @@
 			);
 			mainGroup = 0803A5B32D1ABDDB005CB5E8;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0803A5BD2D1ABDDB005CB5E8 /* Products */;
 			projectDirPath = "";

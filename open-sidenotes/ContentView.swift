@@ -1,104 +1,101 @@
-//
-//  ContentView.swift
-//  open-sidenotes
-//
-//  Created by 李晨洋 on 2024/12/24.
-//
-
 import SwiftUI
 
 struct ContentView: View {
     @StateObject private var noteStore = NoteStore()
     @State private var selectedNote: Note?
-    @State private var newTitle: String = ""
-    @State private var newContent: String = ""
+    @State private var title: String = ""
+    @State private var content: String = Constants.defaultWelcomeContent
     @State private var isEditing: Bool = false
+    @State private var saveTask: Task<Void, Never>?
+    @State private var showDrawer: Bool = false
+    @State private var showSettings: Bool = false
 
     var body: some View {
-        HStack(spacing: 0) {
-            // 笔记列表
-            VStack(alignment: .leading) {
-                HStack {
-                    Text("Notes")
-                        .font(.headline)
-                    Spacer()
-                    Button(action: {
-                        newTitle = ""
-                        newContent = ""
-                        isEditing = false
-                        selectedNote = nil
-                    }) {
-                        Image(systemName: "plus")
+        ZStack(alignment: .leading) {
+            // Base layer: Full-width editor
+            NoteEditorView(
+                noteStore: noteStore,
+                selectedNote: $selectedNote,
+                isEditing: $isEditing,
+                title: $title,
+                content: $content,
+                onToggleDrawer: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showDrawer.toggle()
                     }
                 }
-                .padding([.top, .horizontal])
-                List(selection: $selectedNote) {
-                    ForEach(noteStore.notes) { note in
-                        VStack(alignment: .leading) {
-                            Text(note.title).font(.body).bold()
-                            Text(note.content).font(.caption).lineLimit(1)
+            )
+
+            // Overlay: Drawer (when shown)
+            if showDrawer {
+                NoteListDrawer(
+                    noteStore: noteStore,
+                    selectedNote: $selectedNote,
+                    onNewNote: {
+                        createNewNote()
+                    },
+                    onClose: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showDrawer = false
                         }
-                        .tag(note as Note?)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            selectedNote = note
-                            newTitle = note.title
-                            newContent = note.content
-                            isEditing = true
-                        }
+                    },
+                    onOpenSettings: {
+                        showSettings = true
                     }
-                    .onDelete { indexSet in
-                        for index in indexSet {
-                            let note = noteStore.notes[index]
-                            noteStore.deleteNote(note)
-                            if selectedNote == note {
-                                selectedNote = nil
-                                isEditing = false
-                            }
-                        }
-                    }
-                }
+                )
+                .transition(.move(edge: .leading))
+                .zIndex(1)
             }
-            .frame(width: 220)
-            .background(Color(.windowBackgroundColor))
-            Divider()
-            // 编辑/新建区
-            VStack(alignment: .leading) {
-                if isEditing || selectedNote == nil {
-                    TextField("Title", text: $newTitle)
-                        .font(.title2)
-                        .padding(.top)
-                    TextEditor(text: $newContent)
-                        .font(.body)
-                        .border(Color.gray.opacity(0.2))
-                    HStack {
-                        if isEditing, let note = selectedNote {
-                            Button("Save") {
-                                noteStore.updateNote(note, title: newTitle, content: newContent)
-                            }
-                            Button("Delete") {
-                                noteStore.deleteNote(note)
-                                selectedNote = nil
-                                isEditing = false
-                            }
-                            .foregroundColor(.red)
-                        } else {
-                            Button("Add Note") {
-                                noteStore.addNote(title: newTitle, content: newContent)
-                                newTitle = ""
-                                newContent = ""
-                            }
-                        }
-                        Spacer()
-                    }
-                } else {
-                    Text("Select or create a note")
-                        .foregroundColor(.secondary)
-                        .padding()
+        }
+        .background(Color(hex: "FAF9F6"))
+        .clipShape(RoundedCorner(radius: 12, corners: [.topLeft, .bottomLeft]))
+        .sheet(isPresented: $showSettings) {
+            SettingsView(onPathChanged: {
+                Task {
+                    await noteStore.loadNotes()
                 }
-                Spacer()
+            })
+        }
+        .onChange(of: selectedNote) { newNote in
+            if let note = newNote {
+                title = note.title
+                content = note.content
+                isEditing = true
             }
-            .padding()
+        }
+        .onChange(of: title) { _ in
+            scheduleAutoSave()
+        }
+        .onChange(of: content) { _ in
+            scheduleAutoSave()
+        }
+    }
+
+    private func scheduleAutoSave() {
+        saveTask?.cancel()
+
+        guard isEditing, let note = selectedNote else { return }
+
+        saveTask = Task {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+
+            guard !Task.isCancelled else { return }
+
+            await noteStore.updateNote(note, title: title, content: content)
+        }
+    }
+
+    private func createNewNote() {
+        Task {
+            let newNote = await noteStore.addNote(
+                title: "Untitled",
+                content: Constants.defaultWelcomeContent
+            )
+
+            selectedNote = newNote
+            title = newNote.title
+            content = newNote.content
+            isEditing = true
         }
     }
 }

@@ -7,36 +7,11 @@ struct Note: Identifiable, Equatable, Hashable {
     var createdAt: Date
     var updatedAt: Date
 
-    init(title: String, content: String) {
-        self.id = UUID()
+    init(id: UUID = UUID(), title: String, content: String, createdAt: Date = Date(), updatedAt: Date = Date()) {
+        self.id = id
         self.title = title
         self.content = content
-        self.createdAt = Date()
-        self.updatedAt = Date()
-    }
-}
-
-class NoteStore: ObservableObject {
-    @Published private(set) var notes: [Note] = []
-
-    func addNote(title: String, content: String) {
-        let note = Note(title: title, content: content)
-        notes.append(note)
-    }
-
-    func updateNote(_ note: Note, title: String, content: String) {
-        if let index = notes.firstIndex(of: note) {
-            notes[index].title = title
-            notes[index].content = content
-            notes[index].updatedAt = Date()
-        }
-    }
-
-    func deleteNote(_ note: Note) {
-        notes.removeAll { $0.id == note.id }
-    }
-
-    func getNote(by id: UUID) -> Note? {
-        notes.first { $0.id == id }
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
     }
 }
