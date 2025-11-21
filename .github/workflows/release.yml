@@ -1,0 +1,80 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-14
+    strategy:
+      matrix:
+        arch: [arm64, x86_64]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Build
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          xcodebuild -project open-sidenotes.xcodeproj \
+            -scheme open-sidenotes \
+            -configuration Release \
+            -archivePath "build/open-sidenotes-${ARCH}.xcarchive" \
+            -arch "${ARCH}" \
+            archive \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Export app
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          mkdir -p build/export
+          cp -R "build/open-sidenotes-${ARCH}.xcarchive/Products/Applications/open-sidenotes.app" build/export/
+
+      - name: Create DMG
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          hdiutil create -volname "Open Sidenotes" \
+            -srcfolder build/export/open-sidenotes.app \
+            -ov -format UDZO \
+            "build/open-sidenotes-${ARCH}.dmg"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-sidenotes-${{ matrix.arch }}
+          path: build/open-sidenotes-${{ matrix.arch }}.dmg
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download ARM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: open-sidenotes-arm64
+
+      - name: Download Intel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: open-sidenotes-x86_64
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            open-sidenotes-arm64.dmg
+            open-sidenotes-x86_64.dmg
+          generate_release_notes: true
