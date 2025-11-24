@@ -8,7 +8,6 @@ struct ContentView: View {
     @State private var isEditing: Bool = false
     @State private var saveTask: Task<Void, Never>?
     @State private var showDrawer: Bool = false
-    @State private var showSettings: Bool = false
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -40,7 +39,8 @@ struct ContentView: View {
                         }
                     },
                     onOpenSettings: {
-                        showSettings = true
+                        print("⚙️ onOpenSettings triggered - posting notification")
+                        NotificationCenter.default.post(name: .openSettingsWindow, object: nil)
                     }
                 )
                 .transition(.move(edge: .leading))
@@ -49,13 +49,6 @@ struct ContentView: View {
         }
         .background(Color(hex: "FAF9F6"))
         .clipShape(RoundedCorner(radius: 12, corners: [.topLeft, .bottomLeft]))
-        .sheet(isPresented: $showSettings) {
-            SettingsView(onPathChanged: {
-                Task {
-                    await noteStore.loadNotes()
-                }
-            })
-        }
         .onChange(of: selectedNote) { newNote in
             if let note = newNote {
                 title = note.title

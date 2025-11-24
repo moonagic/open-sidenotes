@@ -34,13 +34,22 @@ class ShortcutSettings: ObservableObject {
 
     @Published var toggleWindowShortcut: KeyboardShortcut? {
         didSet {
-            save()
+            saveShortcut()
+        }
+    }
+
+    @Published var showDockIcon: Bool {
+        didSet {
+            saveDockIcon()
+            NotificationCenter.default.post(name: .dockIconSettingChanged, object: nil)
         }
     }
 
     private let toggleWindowKey = "toggleWindowShortcut"
+    private let showDockIconKey = "showDockIcon"
 
     private init() {
+        showDockIcon = UserDefaults.standard.object(forKey: showDockIconKey) as? Bool ?? true
         load()
     }
 
@@ -56,11 +65,15 @@ class ShortcutSettings: ObservableObject {
         }
     }
 
-    private func save() {
+    private func saveShortcut() {
         if let shortcut = toggleWindowShortcut,
            let data = try? JSONEncoder().encode(shortcut) {
             UserDefaults.standard.set(data, forKey: toggleWindowKey)
         }
+    }
+
+    private func saveDockIcon() {
+        UserDefaults.standard.set(showDockIcon, forKey: showDockIconKey)
     }
 }
 
@@ -135,4 +148,9 @@ class KeyCodeTranslator {
     func string(for keyCode: UInt16) -> String? {
         return keyCodeMap[keyCode]
     }
+}
+
+extension Notification.Name {
+    static let dockIconSettingChanged = Notification.Name("dockIconSettingChanged")
+    static let openSettingsWindow = Notification.Name("openSettingsWindow")
 }
