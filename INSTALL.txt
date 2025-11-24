@@ -1,0 +1,27 @@
+Open Sidenotes - Installation Guide
+====================================
+
+Installation Steps:
+1. Drag "open-sidenotes.app" to the "Applications" folder
+2. Open the app using one of these methods:
+
+Method 1 (Recommended):
+- RIGHT-CLICK on "open-sidenotes" in Applications
+- Select "Open"
+- Click "Open" in the security dialog
+
+Method 2:
+- Try to open the app normally
+- Go to System Settings > Privacy & Security
+- Scroll down and click "Open Anyway"
+- Confirm by clicking "Open"
+
+If you see "app is damaged" error:
+- Open Terminal and run:
+  xattr -cr /Applications/open-sidenotes.app
+- Then try opening the app again
+
+Note: This app is not signed with an Apple Developer certificate,
+so macOS Gatekeeper requires manual approval on first launch.
+
+After first launch, the app will run normally from the menu bar.

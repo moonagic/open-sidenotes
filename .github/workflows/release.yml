@@ -42,6 +42,7 @@ jobs:
         run: |
           mkdir -p build/dmg
           cp -R "build/open-sidenotes-${ARCH}.xcarchive/Products/Applications/open-sidenotes.app" build/dmg/
+          cp INSTALL.txt build/dmg/
           ln -s /Applications build/dmg/Applications
           hdiutil create -volname "Open Sidenotes" \
             -srcfolder build/dmg \
