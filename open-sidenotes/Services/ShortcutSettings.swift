@@ -45,11 +45,27 @@ class ShortcutSettings: ObservableObject {
         }
     }
 
+    @Published var autoHideOnMouseExit: Bool {
+        didSet {
+            saveAutoHide()
+        }
+    }
+
+    @Published var hideDelay: Double {
+        didSet {
+            saveHideDelay()
+        }
+    }
+
     private let toggleWindowKey = "toggleWindowShortcut"
     private let showDockIconKey = "showDockIcon"
+    private let autoHideOnMouseExitKey = "autoHideOnMouseExit"
+    private let hideDelayKey = "hideDelay"
 
     private init() {
         showDockIcon = UserDefaults.standard.object(forKey: showDockIconKey) as? Bool ?? true
+        autoHideOnMouseExit = UserDefaults.standard.object(forKey: autoHideOnMouseExitKey) as? Bool ?? true
+        hideDelay = UserDefaults.standard.object(forKey: hideDelayKey) as? Double ?? 0.5
         load()
     }
 
@@ -74,6 +90,14 @@ class ShortcutSettings: ObservableObject {
 
     private func saveDockIcon() {
         UserDefaults.standard.set(showDockIcon, forKey: showDockIconKey)
+    }
+
+    private func saveAutoHide() {
+        UserDefaults.standard.set(autoHideOnMouseExit, forKey: autoHideOnMouseExitKey)
+    }
+
+    private func saveHideDelay() {
+        UserDefaults.standard.set(hideDelay, forKey: hideDelayKey)
     }
 }
 

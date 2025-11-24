@@ -16,6 +16,8 @@ class SideNotesWindowController: NSWindowController {
     private var hideTimer: Timer?
     private var dummyWindow: NSWindow?
     private var isAnimating = false
+    private var trackingArea: NSTrackingArea?
+    private let settings = ShortcutSettings.shared
 
     init() {
         let visibleFrame = NSScreen.main!.visibleFrame
@@ -46,6 +48,7 @@ class SideNotesWindowController: NSWindowController {
 
         setupDummyWindow()
         setupEventMonitors()
+        setupTrackingArea()
     }
 
     private func setupDummyWindow() {
@@ -80,6 +83,32 @@ class SideNotesWindowController: NSWindowController {
         }
     }
 
+    private func setupTrackingArea() {
+        guard let contentView = window?.contentView else { return }
+
+        trackingArea = NSTrackingArea(
+            rect: contentView.bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        contentView.addTrackingArea(trackingArea!)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        if isShown && settings.autoHideOnMouseExit {
+            if settings.hideDelay == 0 {
+                hideWindow()
+            } else {
+                startHideTimer()
+            }
+        }
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        cancelHideTimer()
+    }
+
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
@@ -96,6 +125,10 @@ class SideNotesWindowController: NSWindowController {
         if let monitor = keyMonitor {
             NSEvent.removeMonitor(monitor)
         }
+
+        if let trackingArea = trackingArea, let contentView = window?.contentView {
+            contentView.removeTrackingArea(trackingArea)
+        }
     }
 
     private func handleMouseMove() {
@@ -108,7 +141,7 @@ class SideNotesWindowController: NSWindowController {
                 showWindow()
             }
             cancelHideTimer()
-        } else if isShown && !isMouseInWindow() {
+        } else if isShown && !isMouseInWindow() && settings.autoHideOnMouseExit {
             startHideTimer()
         }
 
@@ -136,7 +169,7 @@ class SideNotesWindowController: NSWindowController {
 
     private func startHideTimer() {
         cancelHideTimer()
-        hideTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
+        hideTimer = Timer.scheduledTimer(withTimeInterval: settings.hideDelay, repeats: false) { [weak self] _ in
             if self?.isShown == true && self?.isMouseInWindow() == false {
                 self?.hideWindow()
             }

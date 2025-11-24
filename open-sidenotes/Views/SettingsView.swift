@@ -27,6 +27,59 @@ struct CustomToggleStyle: ToggleStyle {
     }
 }
 
+struct CustomSlider: View {
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let step: Double
+    var tintColor: Color
+
+    @State private var isDragging = false
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color(hex: "E0E0E0"))
+                    .frame(height: 4)
+
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(tintColor)
+                    .frame(width: progress(in: geometry.size.width), height: 4)
+
+                Circle()
+                    .fill(.white)
+                    .shadow(color: .black.opacity(0.2), radius: 3, x: 0, y: 1)
+                    .frame(width: 16, height: 16)
+                    .offset(x: progress(in: geometry.size.width) - 8)
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { gesture in
+                                isDragging = true
+                                updateValue(in: geometry.size.width, at: gesture.location.x)
+                            }
+                            .onEnded { _ in
+                                isDragging = false
+                            }
+                    )
+            }
+            .frame(height: 16)
+        }
+        .frame(height: 16)
+    }
+
+    private func progress(in width: CGFloat) -> CGFloat {
+        let normalizedValue = (value - range.lowerBound) / (range.upperBound - range.lowerBound)
+        return CGFloat(normalizedValue) * width
+    }
+
+    private func updateValue(in width: CGFloat, at location: CGFloat) {
+        let normalizedValue = max(0, min(1, location / width))
+        let newValue = range.lowerBound + normalizedValue * (range.upperBound - range.lowerBound)
+        let steppedValue = round(newValue / step) * step
+        value = max(range.lowerBound, min(range.upperBound, steppedValue))
+    }
+}
+
 struct SettingsView: View {
     @State private var currentPath: String
     @State private var showReloadAlert = false
@@ -40,10 +93,11 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 20) {
 
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Appearance")
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Appearance")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(Color(hex: "666666"))
 
@@ -96,6 +150,46 @@ struct SettingsView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 12) {
+                Text("Window Behavior")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(Color(hex: "666666"))
+
+                Toggle(isOn: $shortcutSettings.autoHideOnMouseExit) {
+                    Text("Auto-hide when mouse exits")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(hex: "666666"))
+                }
+                .toggleStyle(CustomToggleStyle(tintColor: Color(hex: "7C9885")))
+
+                if shortcutSettings.autoHideOnMouseExit {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Hide Delay")
+                                .font(.system(size: 12))
+                                .foregroundColor(Color(hex: "666666"))
+                            Spacer()
+                            Text(String(format: "%.1f s", shortcutSettings.hideDelay))
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(Color(hex: "7C9885"))
+                        }
+
+                        CustomSlider(
+                            value: $shortcutSettings.hideDelay,
+                            range: 0.0...3.0,
+                            step: 0.1,
+                            tintColor: Color(hex: "7C9885")
+                        )
+                    }
+                }
+
+                Text("Control whether the window hides automatically when mouse leaves")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(hex: "999999"))
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 12) {
                 Text("Keyboard Shortcuts")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(Color(hex: "666666"))
@@ -109,8 +203,12 @@ struct SettingsView: View {
                     ShortcutRecorderView(shortcut: $shortcutSettings.toggleWindowShortcut)
                 }
             }
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 24)
+            .padding(.bottom, 12)
 
-            Spacer()
+            Divider()
 
             HStack {
                 Button(action: resetToDefault) {
@@ -126,10 +224,13 @@ struct SettingsView: View {
 
                 Spacer()
             }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 12)
+            .background(Color.white)
         }
-        .padding(24)
-        .frame(width: 450, height: 520)
+        .frame(width: 450, height: shortcutSettings.autoHideOnMouseExit ? 620 : 570)
         .background(Color.white)
+        .animation(.easeInOut(duration: 0.3), value: shortcutSettings.autoHideOnMouseExit)
         .alert("Reload Required", isPresented: $showReloadAlert) {
             Button("Reload Now", role: .none) {
                 onPathChanged()
