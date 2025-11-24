@@ -121,11 +121,10 @@ class SideNotesWindowController: NSWindowController {
         }
     }
 
-    private func handleKeyDown(_ event: NSEvent) -> NSEvent? {
+    private func handleKeyDown(_ event: NSEvent) {
         if event.keyCode == 53 && isShown {
             hideWindow()
         }
-        return event
     }
 
     private func isMouseInWindow() -> Bool {

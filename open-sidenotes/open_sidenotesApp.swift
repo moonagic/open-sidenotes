@@ -7,7 +7,11 @@ struct open_sidenotesApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     var body: some Scene {
         Settings {
-            EmptyView()
+            SettingsView(onPathChanged: {
+                appDelegate.windowController?.window?.contentView = NSHostingView(
+                    rootView: ContentView()
+                )
+            })
         }
     }
 }
@@ -18,6 +22,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         windowController = SideNotesWindowController()
+
+        if let windowController = windowController {
+            ShortcutManager.shared.setup(windowController: windowController)
+        }
 
         if !OnboardingManager.hasCompletedOnboarding() {
             showOnboarding()

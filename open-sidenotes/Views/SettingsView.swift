@@ -5,6 +5,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var currentPath: String
     @State private var showReloadAlert = false
+    @ObservedObject private var shortcutSettings = ShortcutSettings.shared
 
     let onPathChanged: () -> Void
 
@@ -53,6 +54,23 @@ struct SettingsView: View {
                     .foregroundColor(Color(hex: "999999"))
             }
 
+            Divider()
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Keyboard Shortcuts")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(Color(hex: "666666"))
+
+                HStack {
+                    Text("Toggle Window")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(hex: "666666"))
+                        .frame(width: 100, alignment: .leading)
+
+                    ShortcutRecorderView(shortcut: $shortcutSettings.toggleWindowShortcut)
+                }
+            }
+
             Spacer()
 
             HStack {
@@ -82,7 +100,7 @@ struct SettingsView: View {
             }
         }
         .padding(24)
-        .frame(width: 340, height: 280)
+        .frame(width: 400, height: 380)
         .background(Color.white)
         .alert("Reload Required", isPresented: $showReloadAlert) {
             Button("Reload Now", role: .none) {
