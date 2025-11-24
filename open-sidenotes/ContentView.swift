@@ -61,6 +61,17 @@ struct ContentView: View {
                 title = note.title
                 content = note.content
                 isEditing = true
+                LastOpenedNoteManager.shared.saveLastOpenedNote(note.id)
+            }
+        }
+        .task {
+            while noteStore.isLoading {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+
+            if let lastNoteID = LastOpenedNoteManager.shared.getLastOpenedNoteID(),
+               let note = noteStore.getNote(by: lastNoteID) {
+                selectedNote = note
             }
         }
         .onChange(of: title) { _ in
