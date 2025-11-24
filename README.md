@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="icon.png" alt="Open Sidenotes Icon" width="120" height="120">
+
 # Open Sidenotes
 
 **A minimal, elegant side panel for quick note-taking on macOS**
