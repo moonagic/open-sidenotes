@@ -29,19 +29,15 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
-      - name: Export app
-        env:
-          ARCH: ${{ matrix.arch }}
-        run: |
-          mkdir -p build/export
-          cp -R "build/open-sidenotes-${ARCH}.xcarchive/Products/Applications/open-sidenotes.app" build/export/
-
       - name: Create DMG
         env:
           ARCH: ${{ matrix.arch }}
         run: |
+          mkdir -p build/dmg
+          cp -R "build/open-sidenotes-${ARCH}.xcarchive/Products/Applications/open-sidenotes.app" build/dmg/
+          ln -s /Applications build/dmg/Applications
           hdiutil create -volname "Open Sidenotes" \
-            -srcfolder build/export/open-sidenotes.app \
+            -srcfolder build/dmg \
             -ov -format UDZO \
             "build/open-sidenotes-${ARCH}.dmg"
 
