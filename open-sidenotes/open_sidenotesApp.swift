@@ -24,6 +24,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        windowController?.showWindowFromDock()
+        return true
+    }
+
     private func showOnboarding() {
         onboardingWindowController = OnboardingWindowController { [weak self] in
             OnboardingManager.markOnboardingComplete()

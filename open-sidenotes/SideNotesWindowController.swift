@@ -14,6 +14,8 @@ class SideNotesWindowController: NSWindowController {
     private var isShown = false
     private var lastAtRightEdge = false
     private var hideTimer: Timer?
+    private var dummyWindow: NSWindow?
+    private var isAnimating = false
 
     init() {
         let visibleFrame = NSScreen.main!.visibleFrame
@@ -25,10 +27,10 @@ class SideNotesWindowController: NSWindowController {
         )
         window.isOpaque = false
         window.backgroundColor = .clear
-        window.level = .normal
+        window.level = .floating
         window.hasShadow = true
         window.ignoresMouseEvents = false
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         window.isMovableByWindowBackground = true
 
         let contentView = ContentView()
@@ -42,7 +44,25 @@ class SideNotesWindowController: NSWindowController {
 
         super.init(window: window)
 
+        setupDummyWindow()
         setupEventMonitors()
+    }
+
+    private func setupDummyWindow() {
+        let dummy = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1, height: 1),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        dummy.isOpaque = false
+        dummy.backgroundColor = .clear
+        dummy.alphaValue = 0
+        dummy.ignoresMouseEvents = true
+        dummy.level = .floating
+        dummy.collectionBehavior = [.stationary, .ignoresCycle]
+        dummy.orderBack(nil)
+        dummyWindow = dummy
     }
 
     private func setupEventMonitors() {
@@ -130,8 +150,9 @@ class SideNotesWindowController: NSWindowController {
     }
 
     private func showWindow() {
-        guard let window = self.window, !isShown else { return }
+        guard let window = self.window, !isShown, !isAnimating else { return }
         isShown = true
+        isAnimating = true
         guard let visibleFrame = NSScreen.main?.visibleFrame else { return }
         window.setFrame(NSRect(x: visibleFrame.maxX, y: visibleFrame.minY, width: windowWidth, height: visibleFrame.height), display: false)
         window.makeKeyAndOrderFront(nil)
@@ -139,19 +160,35 @@ class SideNotesWindowController: NSWindowController {
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.2
             window.animator().setFrame(NSRect(x: visibleFrame.maxX - windowWidth, y: visibleFrame.minY, width: windowWidth, height: visibleFrame.height), display: true)
+        }, completionHandler: { [weak self] in
+            self?.isAnimating = false
         })
     }
 
     private func hideWindow() {
-        guard let window = self.window, isShown else { return }
+        guard let window = self.window, isShown, !isAnimating else { return }
         isShown = false
+        isAnimating = true
         cancelHideTimer()
         guard let visibleFrame = NSScreen.main?.visibleFrame else { return }
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.2
             window.animator().setFrame(NSRect(x: visibleFrame.maxX, y: visibleFrame.minY, width: windowWidth, height: visibleFrame.height), display: true)
-        }, completionHandler: {
+        }, completionHandler: { [weak self] in
             window.orderOut(nil)
+            self?.isAnimating = false
         })
+    }
+
+    func toggleWindow() {
+        if isShown {
+            hideWindow()
+        } else {
+            showWindow()
+        }
+    }
+
+    func showWindowFromDock() {
+        toggleWindow()
     }
 }
