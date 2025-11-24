@@ -16,11 +16,15 @@
 ## Features
 
 - **Edge Activation** — Move your mouse to the right edge of the screen to reveal the notes panel
+- **Keyboard Shortcut** — Toggle window with customizable global shortcut (default: ⌘⌃Space)
 - **Live Markdown** — Typora-style editing with real-time rendering while preserving source syntax
 - **Auto Save** — Your notes are automatically saved as you type
+- **Smart Auto-Hide** — Configurable auto-hide when mouse exits (0-3s delay)
+- **Session Restore** — Automatically reopens your last note on launch
+- **Customizable Settings** — Control Dock icon, storage location, and window behavior
 - **Lightweight** — Native SwiftUI app with minimal resource usage
 - **Always Available** — Works across all spaces and during full-screen apps
-- **Local Storage** — Notes stored as Markdown files in `~/Documents/OpenSidenotes/`
+- **Local Storage** — Notes stored as Markdown files in customizable directory
 
 ## Installation
 
@@ -43,18 +47,27 @@ xcodebuild -project open-sidenotes.xcodeproj -scheme open-sidenotes build
 
 ## Usage
 
-1. Launch the app — it runs in the background without a dock icon
-2. Move your mouse to the **right edge** of the screen
-3. The notes panel slides in automatically
-4. Start writing in Markdown
-5. Move to the edge again to hide the panel
+1. Launch the app — it runs as a menu bar utility
+2. **Show panel**: Move mouse to the right edge OR press `⌘⌃Space`
+3. Start writing in Markdown with live rendering
+4. **Hide panel**: Move to edge again, press shortcut again, or let it auto-hide
+5. Access settings from the menu bar icon
 
 ### Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
+| `⌘⌃Space` | Toggle Window (customizable) |
 | `⌘ F` | Find & Replace |
 | `⌘ N` | New Note |
+
+### Settings
+
+Access settings to customize:
+- **Appearance**: Show/hide Dock icon (requires restart)
+- **Storage Location**: Choose where notes are saved
+- **Window Behavior**: Enable auto-hide with custom delay (0-3s)
+- **Keyboard Shortcuts**: Record custom shortcut for window toggle
 
 ### Markdown Support
 

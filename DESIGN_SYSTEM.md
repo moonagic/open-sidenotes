@@ -132,7 +132,7 @@ Minimal, directional shadows create a sense of layering without being heavy-hand
 - **Secondary Text**: Smaller (12pt), lighter gray
 - **Centered vertically and horizontally**
 
-### Drawer Layout (NEW)
+### Drawer Layout
 - **Window Width**: 400px (compact side panel)
 - **Drawer Width**: 280px
 - **Editor Width**: Full 400px (336px usable after 32px padding on each side)
@@ -153,6 +153,62 @@ Minimal, directional shadows create a sense of layering without being heavy-hand
 #### Design Rationale
 The drawer pattern maximizes editor space (336px usable width vs. previous 44px) while maintaining quick access to the note list. The semi-transparent overlay and slide-in animation clearly communicate the layered interaction model. This approach keeps the window compact (400px) suitable for a side panel application while providing full editing capability.
 
+### Settings Window
+- **Window Size**: 450px × 570px (expands to 620px when auto-hide is enabled)
+- **Background**: Pure white (#FFFFFF)
+- **Content Padding**: 24px horizontal, 24px vertical top
+- **Section Spacing**: 20px between major sections
+- **Dividers**: Full-width horizontal lines between sections
+
+#### Settings Components
+**Custom Toggle Switch**:
+- **Dimensions**: 48px × 28px rounded rectangle
+- **Off State**: Light gray background (#E0E0E0)
+- **On State**: Sage green background (#7C9885)
+- **Toggle Circle**: White with 2px shadow, 3px padding, slides with spring animation
+- **Animation**: Spring response 0.3, dampingFraction 0.7
+
+**Custom Slider** (for delay adjustment):
+- **Track**: 4px height, 2px corner radius
+- **Track Color**: Light gray (#E0E0E0) inactive, sage green (#7C9885) active
+- **Thumb**: 16px white circle with shadow
+- **Range**: 0.0-3.0 seconds, 0.1 step increments
+- **Value Display**: Shows formatted delay (e.g., "0.5 s") in sage green
+
+**Shortcut Recorder**:
+- **Dimensions**: Auto-width × 32px height
+- **Corner Radius**: 6px
+- **States**:
+  - **Default**: Light gray background (#F5F5F5), placeholder "Click to record"
+  - **Recording**: Light green background (#E8F5E9), sage green border (2px), "Press keys..." text
+  - **Set**: Displays shortcut symbols (⌘⌃⌥⇧) + key name
+- **Clear Button**: 16px circle with "×" icon, appears on hover when shortcut is set
+- **Text**: 12pt system font, medium weight when active
+
+#### Settings Categories
+1. **Appearance**
+   - Show Dock Icon toggle
+   - Note: "Requires app restart to take effect"
+
+2. **Storage Location**
+   - Current path display (gray box, 12px padding)
+   - "Choose Folder" button (sage green)
+   - Reload alert when path changes
+
+3. **Window Behavior**
+   - Auto-hide toggle
+   - Hide delay slider (only visible when auto-hide enabled)
+   - Smooth height animation (0.3s) when toggling
+
+4. **Keyboard Shortcuts**
+   - Toggle Window shortcut recorder
+   - Custom key combination capture
+
+**Reset Button**: Bottom-left, gray background (#F0F0F0), "Reset to Default" text
+
+#### Design Rationale
+The settings window uses custom-styled components that match the app's editorial minimalism aesthetic while providing modern, intuitive controls. The sage green accent color creates visual consistency with the main interface. Inline help text (#999999) provides context without cluttering the design. The expandable layout (570→620px) accommodates conditional controls smoothly.
+
 ---
 
 ## Animation & Motion
@@ -168,6 +224,10 @@ The drawer pattern maximizes editor space (336px usable width vs. previous 44px)
 - **Drawer Slide**: 0.2s easeInOut with `.move(edge: .leading)` transition
 - **Background Overlay**: Fade in/out with drawer (automatic with SwiftUI animation)
 - **Menu Button Hover**: Instant opacity change from 8% to 15%
+- **Toggle Switch**: Spring animation (response 0.3, damping 0.7) for smooth toggle
+- **Settings Height**: 0.3s easeInOut when showing/hiding delay slider
+- **Auto-hide**: Configurable delay (0-3s) before window slides out
+- **Shortcut Recorder**: Instant visual feedback when entering recording state
 
 ### Future Enhancements (Optional)
 - Fade-in for newly created notes
@@ -188,6 +248,10 @@ The drawer pattern maximizes editor space (336px usable width vs. previous 44px)
 - **Hover feedback**: Visual change on all interactive elements
 - **Focus indicators**: System default for keyboard navigation
 - **Semantic colors**: Green for positive/active, red for destructive
+- **Keyboard navigation**: Full keyboard support in settings (Tab to navigate)
+- **Custom shortcuts**: User-configurable for accessibility needs
+- **Clear affordances**: Buttons and controls clearly indicate interactivity
+- **Shortcut recorder**: Visual state changes guide recording process
 
 ### Font Sizes
 - Minimum body text: 15pt (exceeds 12pt minimum recommendation)
@@ -243,6 +307,10 @@ Unlike typical note apps with cold blue accents or stark white backgrounds, Open
 - Minimal shadow usage (drawer and window only)
 - Efficient animation with SwiftUI transitions
 - No heavy animations or effects
+- UserDefaults-based settings persistence (lightweight)
+- Timer-based auto-hide with automatic invalidation
+- Global event monitors only active when needed
+- Custom NSView controls for optimal shortcut recording
 
 ### Future Enhancements
 - Dark mode support (charcoal background with warm accents)

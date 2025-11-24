@@ -16,6 +16,12 @@ Open Sidenotes is a macOS menu bar application that provides a floating side pan
 - **Edge-triggered Activation**: Move mouse to right edge to toggle panel
 - **Auto-save**: Changes saved automatically after 1 second
 - **Drawer UI**: Slide-in note list overlay
+- **Settings Panel**: Comprehensive customization options
+  - Dock icon visibility control
+  - Auto-hide behavior with configurable delay (0-3s)
+  - Custom keyboard shortcuts (default: ⌘⌃Space)
+  - Storage location selection
+- **Session Persistence**: Automatically restores last opened note on launch
 
 ## Tech Stack
 
@@ -57,6 +63,8 @@ Or use Xcode: Open `open-sidenotes.xcodeproj` and press Cmd+R to run.
 - Implements edge-triggered activation: moving mouse to right screen edge (within 2px) toggles window visibility
 - Uses global mouse event monitoring (`NSEvent.addGlobalMonitorForEvents`)
 - Animates window slide-in/out with 0.2s duration using `NSAnimationContext`
+- Auto-hide on mouse exit with configurable delay (0-3s)
+- Supports global keyboard shortcut for window toggle (default: ⌘⌃Space)
 - Window properties:
   - Width: 400px
   - Height: Full screen visible frame
@@ -97,29 +105,62 @@ Or use Xcode: Open `open-sidenotes.xcodeproj` and press Cmd+R to run.
     - On blur: When losing focus
   - Preserves cursor position during re-rendering
 
+**Settings System**
+- `SettingsView`: Comprehensive settings panel with custom UI components
+  - `CustomToggleStyle`: Sage green toggle switches
+  - `CustomSlider`: Styled slider for delay adjustment (0-3s range)
+  - Settings categories: Appearance, Storage, Window Behavior, Keyboard Shortcuts
+- `ShortcutSettings`: ObservableObject managing user preferences
+  - `showDockIcon`: Toggle Dock icon visibility (requires restart)
+  - `autoHideOnMouseExit`: Auto-hide window when mouse leaves
+  - `hideDelay`: Configurable delay before auto-hide (0-3s)
+  - `toggleWindowShortcut`: Custom global keyboard shortcut
+  - Persisted via UserDefaults
+- `ShortcutRecorderView`: Custom keyboard shortcut recorder
+  - Interactive key capture with visual feedback
+  - Supports all modifier keys (⌘⌃⌥⇧)
+  - Clear button to remove shortcuts
+  - Real-time preview of recorded shortcut
+
+**Session Management**
+- `LastOpenedNoteManager`: Persists and restores last active note
+  - Saves note ID on selection change
+  - Auto-restores on app launch
+  - Uses UserDefaults for storage
+
 ### Data Flow
 
-1. User moves mouse to right edge → `SideNotesWindowController` detects → Window slides in
-2. User selects note → Updates `selectedNote` state → Loads Markdown content from `NoteStore`
-3. User types Markdown → `MarkdownEditor` updates plain text binding
-4. Render trigger fires (space/newline/1s delay) → `MarkdownRenderer` applies styling to source
-5. Auto-save triggers (1s after edit) → `NoteStore.updateNote` persists to JSON
-6. Mouse moves to edge again → Window slides out
+1. **App Launch** → Loads `ShortcutSettings` and `LastOpenedNoteManager` → Restores last note if exists
+2. **Edge Trigger** → User moves mouse to right edge → `SideNotesWindowController` detects → Window slides in
+3. **Keyboard Toggle** → User presses shortcut (⌘⌃Space) → `ShortcutManager` triggers window toggle
+4. **Note Selection** → User selects note → Saves to `LastOpenedNoteManager` → Loads content from `NoteStore`
+5. **Markdown Editing** → User types → Render triggers (space/newline/1s delay) → `MarkdownRenderer` applies styling
+6. **Auto-save** → 1s after edit → `NoteStore.updateNote` persists to file
+7. **Auto-hide** → Mouse exits window → Delay timer (0-3s) → Window slides out (if enabled)
+8. **Settings Change** → User modifies preferences → `ShortcutSettings` persists to UserDefaults → Notifies observers
 
 ### Key Technical Patterns
 
 - **Custom Markdown Rendering**: Regex-based parser applies styles without deleting source
-- **SwiftUI + AppKit Bridge**: Uses `NSViewRepresentable` to wrap NSTextView
+- **SwiftUI + AppKit Bridge**: Uses `NSViewRepresentable` to wrap NSTextView and custom controls
 - **Smart Debouncing**: Context-aware rendering triggers (immediate on space/newline, delayed otherwise)
-- **Global Event Monitoring**: Tracks mouse position system-wide to detect edge triggers
-- **File-based Persistence**: Markdown files with YAML front matter in Documents directory
-- **Stateful Window Management**: Tracks `isShown` and `lastAtRightEdge` to implement toggle behavior
+- **Global Event Monitoring**: Tracks mouse position and keyboard events system-wide
+- **File-based Persistence**: Markdown files in configurable storage directory
+- **Stateful Window Management**: Tracks `isShown`, `lastAtRightEdge`, and auto-hide timers
+- **Settings Persistence**: UserDefaults-based configuration with reactive updates
+- **Custom UI Components**: Hand-crafted toggle switches, sliders, and shortcut recorder
+- **Session Restoration**: Automatic recovery of last opened note on launch
+- **Hot Keys System**: Global keyboard shortcut registration using Carbon framework
 
 ## Development Notes
 
-- The app runs without a dock icon or standard menu bar (menu bar utility pattern)
+- The app runs as a menu bar utility (Dock icon visibility is configurable)
 - Window appears across all spaces and during full-screen apps
 - Markdown editing preserves all syntax - fully reversible
 - Mouse edge detection threshold is 2px from right screen edge
-- Window background has 98% opacity for semi-transparency
-- **No external dependencies** - pure Swift/AppKit implementation (Down library removed)
+- Auto-hide delay is configurable from 0-3 seconds (default: 0.5s)
+- Default keyboard shortcut: ⌘⌃Space (customizable)
+- Settings require app restart for Dock icon changes to take effect
+- Last opened note is automatically restored on app launch
+- Custom storage directory selection with real-time reload
+- **No external dependencies** - pure Swift/AppKit implementation
