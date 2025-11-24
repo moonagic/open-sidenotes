@@ -29,6 +29,13 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
+      - name: Sign app
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          codesign --deep --force --sign - \
+            "build/open-sidenotes-${ARCH}.xcarchive/Products/Applications/open-sidenotes.app"
+
       - name: Create DMG
         env:
           ARCH: ${{ matrix.arch }}
