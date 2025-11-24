@@ -14,7 +14,21 @@ struct open_sidenotesApp: App {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var windowController: SideNotesWindowController?
+    var onboardingWindowController: OnboardingWindowController?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         windowController = SideNotesWindowController()
+
+        if !OnboardingManager.hasCompletedOnboarding() {
+            showOnboarding()
+        }
+    }
+
+    private func showOnboarding() {
+        onboardingWindowController = OnboardingWindowController { [weak self] in
+            OnboardingManager.markOnboardingComplete()
+            self?.onboardingWindowController = nil
+        }
+        onboardingWindowController?.show()
     }
 }
