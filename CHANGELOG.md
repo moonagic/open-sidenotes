@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/mlhiter/open-sidenotes/releases/tag/v0.8.0) (2025-11-25)
+
+### Features
+
+- feat: test auto-release workflow ([6989c4f](https://github.com/mlhiter/open-sidenotes/commit/6989c4fd845a32a0b7e3424de3d801edbc40f470))
+
+
 ## [0.7.0](https://github.com/mlhiter/open-sidenotes/compare/v0.6.1...v0.7.0) (2025-11-25)
 
 
