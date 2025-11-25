@@ -245,6 +245,7 @@ private struct DrawerNoteListItemView: View {
                 .font(.system(size: 10))
                 .foregroundColor(Color(hex: "999999"))
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
         .background(backgroundColor)
