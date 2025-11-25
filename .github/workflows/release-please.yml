@@ -96,14 +96,22 @@ jobs:
           # Start changelog entry
           CHANGELOG_ENTRY="## [$NEW_VERSION](https://github.com/mlhiter/open-sidenotes/releases/tag/v$NEW_VERSION) ($(date +%Y-%m-%d))\n\n"
 
-          # Get features
-          FEATURES=$(git log $COMMITS_RANGE --grep="^feat" -E --pretty=format:"- %s ([%h](https://github.com/mlhiter/open-sidenotes/commit/%H))")
+          # Get features (remove 'feat:' or 'feat(scope):' prefix)
+          FEATURES=$(git log $COMMITS_RANGE --grep="^feat" -E --pretty=format:"%s|%h|%H" | while IFS='|' read -r msg short full; do
+            # Remove feat: or feat(scope): prefix
+            clean_msg=$(echo "$msg" | sed -E 's/^feat(\([^)]+\))?!?:[[:space:]]*//')
+            echo "* $clean_msg ([$short](https://github.com/mlhiter/open-sidenotes/commit/$full))"
+          done)
           if [ -n "$FEATURES" ]; then
             CHANGELOG_ENTRY="${CHANGELOG_ENTRY}### Features\n\n${FEATURES}\n\n"
           fi
 
-          # Get fixes
-          FIXES=$(git log $COMMITS_RANGE --grep="^fix" -E --pretty=format:"- %s ([%h](https://github.com/mlhiter/open-sidenotes/commit/%H))")
+          # Get fixes (remove 'fix:' or 'fix(scope):' prefix)
+          FIXES=$(git log $COMMITS_RANGE --grep="^fix" -E --pretty=format:"%s|%h|%H" | while IFS='|' read -r msg short full; do
+            # Remove fix: or fix(scope): prefix
+            clean_msg=$(echo "$msg" | sed -E 's/^fix(\([^)]+\))?!?:[[:space:]]*//')
+            echo "* $clean_msg ([$short](https://github.com/mlhiter/open-sidenotes/commit/$full))"
+          done)
           if [ -n "$FIXES" ]; then
             CHANGELOG_ENTRY="${CHANGELOG_ENTRY}### Bug Fixes\n\n${FIXES}\n\n"
           fi
