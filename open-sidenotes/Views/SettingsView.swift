@@ -83,7 +83,9 @@ struct CustomSlider: View {
 struct SettingsView: View {
     @State private var currentPath: String
     @State private var showReloadAlert = false
+    @State private var showUpdateAlert = false
     @ObservedObject private var shortcutSettings = ShortcutSettings.shared
+    @ObservedObject private var updateService = GitHubUpdateService.shared
 
     let onPathChanged: () -> Void
 
@@ -203,6 +205,72 @@ struct SettingsView: View {
                     ShortcutRecorderView(shortcut: $shortcutSettings.toggleWindowShortcut)
                 }
             }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Software Update")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(Color(hex: "666666"))
+
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Current Version: v\(updateService.currentVersion)")
+                            .font(.system(size: 12))
+                            .foregroundColor(Color(hex: "666666"))
+
+                        if let latest = updateService.latestVersion {
+                            if updateService.hasNewVersion() {
+                                Text("Latest Version: v\(latest) (New available)")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(Color(hex: "7C9885"))
+                            } else {
+                                Text("Up to date")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(Color(hex: "999999"))
+                            }
+                        }
+
+                        if let error = updateService.checkError {
+                            Text(error)
+                                .font(.system(size: 11))
+                                .foregroundColor(Color(hex: "E57373"))
+                        }
+                    }
+
+                    Spacer()
+
+                    Button(action: {
+                        Task {
+                            await updateService.checkForUpdates(silent: false)
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            if updateService.isChecking {
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                                    .frame(width: 14, height: 14)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 12))
+                            }
+                            Text(updateService.isChecking ? "Checking..." : "Check for Updates")
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color(hex: "7C9885"))
+                        .cornerRadius(6)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .disabled(updateService.isChecking)
+                }
+
+                Text("Automatic update check frequency: Daily")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(hex: "999999"))
+            }
             }
             .padding(.horizontal, 24)
             .padding(.top, 24)
@@ -228,7 +296,7 @@ struct SettingsView: View {
             .padding(.vertical, 12)
             .background(Color.white)
         }
-        .frame(width: 450, height: shortcutSettings.autoHideOnMouseExit ? 620 : 570)
+        .frame(width: 450, height: shortcutSettings.autoHideOnMouseExit ? 750 : 700)
         .background(Color.white)
         .animation(.easeInOut(duration: 0.3), value: shortcutSettings.autoHideOnMouseExit)
         .alert("Reload Required", isPresented: $showReloadAlert) {
@@ -238,6 +306,9 @@ struct SettingsView: View {
             Button("Later", role: .cancel) {}
         } message: {
             Text("Storage location changed. Reload notes to see files from the new location?")
+        }
+        .sheet(isPresented: $updateService.showUpdateAlert) {
+            UpdateAlertView(updateService: updateService)
         }
     }
 

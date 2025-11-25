@@ -23,6 +23,7 @@
 - **Auto Save** — Your notes are automatically saved as you type
 - **Smart Auto-Hide** — Configurable auto-hide when mouse exits (0-3s delay)
 - **Session Restore** — Automatically reopens your last note on launch
+- **In-App Updates** — Automatic update checking with one-click download from GitHub Releases
 - **Customizable Settings** — Control Dock icon, storage location, and window behavior
 - **Lightweight** — Native SwiftUI app with minimal resource usage
 - **Always Available** — Works across all spaces and during full-screen apps
@@ -70,6 +71,7 @@ Access settings to customize:
 - **Storage Location**: Choose where notes are saved
 - **Window Behavior**: Enable auto-hide with custom delay (0-3s)
 - **Keyboard Shortcuts**: Record custom shortcut for window toggle
+- **Software Updates**: Check for updates manually or automatically (daily)
 
 ### Markdown Support
 

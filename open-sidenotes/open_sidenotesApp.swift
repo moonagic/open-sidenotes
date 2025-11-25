@@ -28,6 +28,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         if !OnboardingManager.hasCompletedOnboarding() {
             showOnboarding()
+        } else {
+            checkForUpdatesIfNeeded()
         }
 
         NotificationCenter.default.addObserver(
@@ -96,5 +98,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateDockIconVisibility() {
         let showDockIcon = ShortcutSettings.shared.showDockIcon
         NSApp.setActivationPolicy(showDockIcon ? .regular : .accessory)
+    }
+
+    private func checkForUpdatesIfNeeded() {
+        Task { @MainActor in
+            let updateService = GitHubUpdateService.shared
+            if updateService.shouldAutoCheck() {
+                await updateService.checkForUpdates(silent: true)
+            }
+        }
     }
 }
