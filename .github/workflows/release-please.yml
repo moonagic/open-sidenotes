@@ -95,48 +95,33 @@ jobs:
         run: |
           COMMITS_RANGE="${LAST_TAG}..HEAD"
 
-          echo "===== DEBUG ====="
-          echo "LAST_TAG: $LAST_TAG"
-          echo "COMMITS_RANGE: $COMMITS_RANGE"
-          echo "Commits in range:"
-          git log $COMMITS_RANGE --oneline
-          echo "Features:"
-          git log $COMMITS_RANGE --grep="^feat" -E --pretty=format:"%s|%h|%H"
-          echo ""
-          echo "Fixes:"
-          git log $COMMITS_RANGE --grep="^fix" -E --pretty=format:"%s|%h|%H"
-          echo ""
-          echo "================="
-
           # Start changelog entry
           CHANGELOG_ENTRY="## [$NEW_VERSION](https://github.com/mlhiter/open-sidenotes/releases/tag/v$NEW_VERSION) ($(date +%Y-%m-%d))\n\n"
 
           # Get features (remove 'feat:' or 'feat(scope):' prefix)
-          FEATURES=""
-          while IFS= read -r line; do
+          FEATURES=$(git log $COMMITS_RANGE --grep="^feat" -E --pretty=format:"%s|%h|%H" | while read -r line; do
             msg=$(echo "$line" | cut -d'|' -f1)
             short=$(echo "$line" | cut -d'|' -f2)
             full=$(echo "$line" | cut -d'|' -f3)
             clean_msg=$(echo "$msg" | sed -E 's/^feat(\([^)]+\))?!?:[[:space:]]*//')
-            FEATURES="${FEATURES}* ${clean_msg} ([${short}](https://github.com/mlhiter/open-sidenotes/commit/${full}))\n"
-          done < <(git log $COMMITS_RANGE --grep="^feat" -E --pretty=format:"%s|%h|%H")
+            echo "* ${clean_msg} ([${short}](https://github.com/mlhiter/open-sidenotes/commit/${full}))"
+          done)
 
           if [ -n "$FEATURES" ]; then
-            CHANGELOG_ENTRY="${CHANGELOG_ENTRY}### Features\n\n${FEATURES}\n"
+            CHANGELOG_ENTRY="${CHANGELOG_ENTRY}### Features\n\n${FEATURES}\n\n"
           fi
 
           # Get fixes (remove 'fix:' or 'fix(scope):' prefix)
-          FIXES=""
-          while IFS= read -r line; do
+          FIXES=$(git log $COMMITS_RANGE --grep="^fix" -E --pretty=format:"%s|%h|%H" | while read -r line; do
             msg=$(echo "$line" | cut -d'|' -f1)
             short=$(echo "$line" | cut -d'|' -f2)
             full=$(echo "$line" | cut -d'|' -f3)
             clean_msg=$(echo "$msg" | sed -E 's/^fix(\([^)]+\))?!?:[[:space:]]*//')
-            FIXES="${FIXES}* ${clean_msg} ([${short}](https://github.com/mlhiter/open-sidenotes/commit/${full}))\n"
-          done < <(git log $COMMITS_RANGE --grep="^fix" -E --pretty=format:"%s|%h|%H")
+            echo "* ${clean_msg} ([${short}](https://github.com/mlhiter/open-sidenotes/commit/${full}))"
+          done)
 
           if [ -n "$FIXES" ]; then
-            CHANGELOG_ENTRY="${CHANGELOG_ENTRY}### Bug Fixes\n\n${FIXES}\n"
+            CHANGELOG_ENTRY="${CHANGELOG_ENTRY}### Bug Fixes\n\n${FIXES}\n\n"
           fi
 
           # Prepend to CHANGELOG.md
