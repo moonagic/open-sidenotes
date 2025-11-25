@@ -82,6 +82,10 @@ struct MarkdownEditor: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
 
+            if textView.markedRange().location != NSNotFound {
+                return
+            }
+
             let plainText = textView.string
             let cursorPosition = textView.selectedRange().location
 
@@ -128,6 +132,9 @@ struct MarkdownEditor: NSViewRepresentable {
         }
 
         func renderMarkdown(in textView: NSTextView, text: String, cursorPosition: Int? = nil) {
+            guard let scrollView = textView.enclosingScrollView else { return }
+
+            let visibleRect = scrollView.documentVisibleRect
             let attributedString = MarkdownRenderer.shared.render(text)
 
             textView.textStorage?.setAttributedString(attributedString)
@@ -136,6 +143,8 @@ struct MarkdownEditor: NSViewRepresentable {
                 let safePosition = min(position, textView.string.count)
                 textView.setSelectedRange(NSRange(location: safePosition, length: 0))
             }
+
+            scrollView.documentView?.scroll(visibleRect.origin)
 
             applySearchHighlight(in: textView, query: lastSearchQuery, currentIndex: lastMatchIndex)
         }
