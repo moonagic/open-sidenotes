@@ -48,6 +48,12 @@ struct MarkdownEditor: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
 
+        context.coordinator.parent = self
+
+        if textView.delegate == nil {
+            textView.delegate = context.coordinator
+        }
+
         let queryChanged = context.coordinator.lastSearchQuery != searchQuery
         let indexChanged = context.coordinator.lastMatchIndex != currentMatchIndex
 
@@ -82,7 +88,8 @@ struct MarkdownEditor: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
 
-            if textView.markedRange().location != NSNotFound {
+            let markedRange = textView.markedRange()
+            if markedRange.location != NSNotFound && markedRange.length > 0 {
                 return
             }
 
@@ -105,7 +112,6 @@ struct MarkdownEditor: NSViewRepresentable {
                     guard let self = self, let textView = textView else { return }
 
                     DispatchQueue.main.async {
-                        // Use current text and cursor, not captured values
                         let currentText = textView.string
                         let currentCursor = textView.selectedRange().location
                         self.renderMarkdown(in: textView, text: currentText, cursorPosition: currentCursor)

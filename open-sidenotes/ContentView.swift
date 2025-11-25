@@ -3,21 +3,25 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var noteStore = NoteStore()
     @State private var selectedNote: Note?
-    @State private var title: String = ""
-    @State private var content: String = ""
-    @State private var isEditing: Bool = false
+    @State private var editingNoteId: UUID?
+    @State private var editingTitle: String = ""
+    @State private var editingContent: String = ""
     @State private var saveTask: Task<Void, Never>?
     @State private var showDrawer: Bool = false
+    @State private var isLoadingNote: Bool = false
+
+    private var isEditing: Bool {
+        editingNoteId != nil
+    }
 
     var body: some View {
         ZStack(alignment: .leading) {
-            // Base layer: Full-width editor
             NoteEditorView(
                 noteStore: noteStore,
                 selectedNote: $selectedNote,
-                isEditing: $isEditing,
-                title: $title,
-                content: $content,
+                isEditing: .constant(isEditing),
+                title: $editingTitle,
+                content: $editingContent,
                 onToggleDrawer: {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         showDrawer.toggle()
@@ -25,7 +29,6 @@ struct ContentView: View {
                 }
             )
 
-            // Overlay: Drawer (when shown)
             if showDrawer {
                 NoteListDrawer(
                     noteStore: noteStore,
@@ -39,7 +42,6 @@ struct ContentView: View {
                         }
                     },
                     onOpenSettings: {
-                        print("⚙️ onOpenSettings triggered - posting notification")
                         NotificationCenter.default.post(name: .openSettingsWindow, object: nil)
                     }
                 )
@@ -50,11 +52,16 @@ struct ContentView: View {
         .background(Color(hex: "FAF9F6"))
         .clipShape(RoundedCorner(radius: 12, corners: [.topLeft, .bottomLeft]))
         .onChange(of: selectedNote) { newNote in
-            if let note = newNote {
-                title = note.title
-                content = note.content
-                isEditing = true
-                LastOpenedNoteManager.shared.saveLastOpenedNote(note.id)
+            handleNoteSelection(newNote)
+        }
+        .onChange(of: editingTitle) { _ in
+            if !isLoadingNote {
+                scheduleAutoSave()
+            }
+        }
+        .onChange(of: editingContent) { _ in
+            if !isLoadingNote {
+                scheduleAutoSave()
             }
         }
         .task {
@@ -69,37 +76,86 @@ struct ContentView: View {
                 )
                 OnboardingManager.markWelcomeNoteCreated()
                 selectedNote = welcomeNote
-                title = welcomeNote.title
-                content = welcomeNote.content
-                isEditing = true
             } else if let lastNoteID = LastOpenedNoteManager.shared.getLastOpenedNoteID(),
                       let note = noteStore.getNote(by: lastNoteID) {
                 selectedNote = note
             }
         }
-        .onChange(of: title) { _ in
-            scheduleAutoSave()
+    }
+
+    private func handleNoteSelection(_ newNote: Note?) {
+        if newNote?.id == editingNoteId {
+            return
         }
-        .onChange(of: content) { _ in
-            scheduleAutoSave()
+
+        saveTask?.cancel()
+
+        if let currentId = editingNoteId, let newId = newNote?.id, currentId != newId {
+            saveCurrentNote(id: currentId, title: editingTitle, content: editingContent)
+        }
+
+        if let note = newNote {
+            startEditing(note)
+        } else {
+            stopEditing()
+        }
+    }
+
+    private func startEditing(_ note: Note) {
+        isLoadingNote = true
+        editingNoteId = note.id
+        editingTitle = note.title
+        editingContent = note.content
+        LastOpenedNoteManager.shared.saveLastOpenedNote(note.id)
+
+        DispatchQueue.main.async {
+            isLoadingNote = false
+        }
+    }
+
+    private func stopEditing() {
+        editingNoteId = nil
+        editingTitle = ""
+        editingContent = ""
+    }
+
+    private func saveCurrentNote(id: UUID, title: String, content: String) {
+        Task {
+            if let note = noteStore.getNote(by: id) {
+                await noteStore.updateNote(note, title: title, content: content)
+            }
         }
     }
 
     private func scheduleAutoSave() {
+        guard let noteId = editingNoteId else { return }
+
         saveTask?.cancel()
 
-        guard isEditing, let note = selectedNote else { return }
+        let titleToSave = editingTitle
+        let contentToSave = editingContent
 
         saveTask = Task {
             try? await Task.sleep(nanoseconds: 1_000_000_000)
 
             guard !Task.isCancelled else { return }
 
-            await noteStore.updateNote(note, title: title, content: content)
+            if let note = noteStore.getNote(by: noteId) {
+                await noteStore.updateNote(note, title: titleToSave, content: contentToSave)
+            }
         }
     }
 
     private func createNewNote() {
+        saveTask?.cancel()
+
+        if let currentId = editingNoteId {
+            saveCurrentNote(id: currentId, title: editingTitle, content: editingContent)
+        }
+
+        isLoadingNote = true
+        selectedNote = nil
+
         Task {
             let newNote = await noteStore.addNote(
                 title: "Untitled",
@@ -107,9 +163,6 @@ struct ContentView: View {
             )
 
             selectedNote = newNote
-            title = newNote.title
-            content = newNote.content
-            isEditing = true
         }
     }
 }
