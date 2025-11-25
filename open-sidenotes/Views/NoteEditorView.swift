@@ -196,3 +196,25 @@ struct NoteEditorView: View {
         updateMatches()
     }
 }
+
+#Preview {
+    @Previewable @State var selectedNote: Note? = Note(
+        title: "Sample Note",
+        content: "# Heading\n\nThis is **bold** text and this is *italic* text.\n\n- List item 1\n- List item 2\n\nSome `code` here."
+    )
+    @Previewable @State var isEditing = true
+    @Previewable @State var title = "Sample Note"
+    @Previewable @State var content = "# Heading\n\nThis is **bold** text and this is *italic* text.\n\n- List item 1\n- List item 2\n\nSome `code` here."
+
+    let noteStore = NoteStore()
+
+    return NoteEditorView(
+        noteStore: noteStore,
+        selectedNote: $selectedNote,
+        isEditing: $isEditing,
+        title: $title,
+        content: $content,
+        onToggleDrawer: {}
+    )
+    .frame(width: 800, height: 600)
+}

@@ -17,7 +17,7 @@ struct MarkdownEditor: NSViewRepresentable {
         textView.backgroundColor = .clear
         textView.font = .systemFont(ofSize: 15, weight: .regular)
         textView.textColor = NSColor(red: 0.17, green: 0.17, blue: 0.17, alpha: 1.0)
-        textView.textContainerInset = NSSize(width: 0, height: 0)
+        textView.textContainerInset = NSSize(width: 16, height: 16)
         textView.delegate = context.coordinator
 
         if let textContainer = textView.textContainer {
@@ -37,6 +37,8 @@ struct MarkdownEditor: NSViewRepresentable {
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
+        scrollView.scrollerStyle = .overlay
+        scrollView.verticalScroller = CustomScroller()
 
         context.coordinator.renderMarkdown(in: textView, text: text)
 
@@ -174,4 +176,29 @@ struct MarkdownEditor: NSViewRepresentable {
             }
         }
     }
+}
+
+#Preview {
+    @Previewable @State var text = """
+# Heading 1
+## Heading 2
+### Heading 3
+
+This is **bold** text and this is *italic* text.
+
+Some `inline code` here.
+
+- List item 1
+- List item 2
+- List item 3
+
+1. Numbered item
+2. Another item
+
+**Bold with `code` inside**
+"""
+
+    return MarkdownEditor(text: $text)
+        .frame(width: 600, height: 400)
+        .padding()
 }

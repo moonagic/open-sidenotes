@@ -148,7 +148,7 @@ struct NoteListDrawer: View {
                     .frame(maxWidth: .infinity)
                     Spacer()
                 } else {
-                    ScrollView {
+                    CustomScrollView {
                         LazyVStack(spacing: 0) {
                             ForEach(filteredNotes) { note in
                                 DrawerNoteListItemView(
@@ -403,4 +403,18 @@ struct RoundedCorner: Shape {
 
         return path
     }
+}
+
+#Preview {
+    @Previewable @State var selectedNote: Note? = nil
+    let noteStore = NoteStore()
+
+    return NoteListDrawer(
+        noteStore: noteStore,
+        selectedNote: $selectedNote,
+        onNewNote: {},
+        onClose: {},
+        onOpenSettings: {}
+    )
+    .frame(width: 800, height: 600)
 }

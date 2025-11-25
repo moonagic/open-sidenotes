@@ -52,7 +52,7 @@ struct NoteListView: View {
                 }
                 .frame(maxWidth: .infinity)
             } else {
-                ScrollView {
+                CustomScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(noteStore.notes) { note in
                             NoteListItemView(
@@ -127,4 +127,16 @@ struct NoteListItemView: View {
         formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: date, relativeTo: Date())
     }
+}
+
+#Preview {
+    @Previewable @State var selectedNote: Note? = nil
+    let noteStore = NoteStore()
+
+    return NoteListView(
+        noteStore: noteStore,
+        selectedNote: $selectedNote,
+        onNewNote: {}
+    )
+    .frame(height: 600)
 }
