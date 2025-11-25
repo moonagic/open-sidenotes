@@ -8,6 +8,7 @@ class MarkdownRenderer {
     private let markColor = NSColor(red: 0.6, green: 0.6, blue: 0.6, alpha: 0.5)
     private let codeColor = NSColor(red: 0.8, green: 0.2, blue: 0.4, alpha: 1.0)
     private let linkColor = NSColor(red: 0.0, green: 0.48, blue: 1.0, alpha: 1.0)
+    private let completedTaskColor = NSColor(red: 0.6, green: 0.6, blue: 0.6, alpha: 1.0)
 
     func render(_ markdown: String) -> NSAttributedString {
         guard !markdown.isEmpty else {
@@ -27,6 +28,7 @@ class MarkdownRenderer {
         )
 
         applyHeadings(to: attributed)
+        applyTaskLists(to: attributed)
         applyBold(to: attributed)
         applyItalic(to: attributed)
         applyInlineCode(to: attributed)
@@ -151,6 +153,38 @@ class MarkdownRenderer {
             attributed.addAttribute(.foregroundColor, value: markColor, range: closeRange)
             attributed.addAttribute(.font, value: codeFont, range: contentRange)
             attributed.addAttribute(.foregroundColor, value: codeColor, range: contentRange)
+        }
+    }
+
+    private func applyTaskLists(to attributed: NSMutableAttributedString) {
+        let pattern = "^(\\s*)([-*+])\\s+\\[([ xX])\\]\\s+(.+)$"
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.anchorsMatchLines]) else { return }
+
+        let matches = regex.matches(in: attributed.string, range: NSRange(location: 0, length: attributed.length))
+
+        for match in matches.reversed() {
+            let markerRange = match.range(at: 2)
+            let checkboxRange = match.range(at: 3)
+            let contentRange = match.range(at: 4)
+
+            let checkboxChar = (attributed.string as NSString).substring(with: checkboxRange)
+            let isChecked = checkboxChar.lowercased() == "x"
+
+            let markFont = NSFont.systemFont(ofSize: 11, weight: .regular)
+
+            attributed.addAttribute(.foregroundColor, value: markColor, range: markerRange)
+
+            let checkboxStart = checkboxRange.location - 1
+            let checkboxLength = checkboxRange.length + 2
+            let fullCheckboxRange = NSRange(location: checkboxStart, length: checkboxLength)
+
+            attributed.addAttribute(.font, value: markFont, range: fullCheckboxRange)
+            attributed.addAttribute(.foregroundColor, value: markColor, range: fullCheckboxRange)
+
+            if isChecked {
+                attributed.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: contentRange)
+                attributed.addAttribute(.foregroundColor, value: completedTaskColor, range: contentRange)
+            }
         }
     }
 

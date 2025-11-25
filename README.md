@@ -86,6 +86,9 @@ Access settings to customize:
 
 1. Numbered
 2. List
+
+- [ ] Task list (uncompleted)
+- [x] Task list (completed with strikethrough)
 ```
 
 ## Tech Stack

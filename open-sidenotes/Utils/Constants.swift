@@ -30,6 +30,11 @@ Your thoughts, beautifully organized with real-time Markdown rendering.
 2. Ordered list item 2
 3. Ordered list item 3
 
+### Task Lists
+- [ ] Uncompleted task
+- [x] Completed task (with strikethrough)
+  - [ ] Nested subtask
+
 ### Links & More
 [Link text](https://example.com)
 > Blockquotes with >
@@ -38,6 +43,7 @@ Your thoughts, beautifully organized with real-time Markdown rendering.
 ---
 
 ## Recent Updates
+- **Task Lists** — Support for `- [ ]` todo and `- [x]` done syntax
 - **Edge-triggered activation** — Move mouse to right edge to toggle
 - **Auto-save** — Changes saved automatically after 1s
 - **Customizable shortcuts** — Default: ⌘⌃Space

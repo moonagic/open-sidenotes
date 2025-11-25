@@ -197,9 +197,13 @@ This is **bold** text and this is *italic* text.
 
 Some `inline code` here.
 
+## Task Lists
+- [ ] Uncompleted task
+- [x] Completed task
+- [ ] Another uncompleted task
+
 - List item 1
 - List item 2
-- List item 3
 
 1. Numbered item
 2. Another item

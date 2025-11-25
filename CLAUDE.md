@@ -12,7 +12,14 @@ Open Sidenotes is a macOS menu bar application that provides a floating side pan
   - Input `# Title` → Renders as large bold heading with visible but dimmed `#`
   - Input `**bold**` → Text becomes bold with `**` markers shown in gray
   - Input `` `code` `` → Monospace font with pink color
+  - Input `- [ ] task` → Task list with visual styling
   - All Markdown syntax remains editable (not deleted after rendering)
+- **Task Lists**: Visual rendering with style-only approach
+  - Syntax: `- [ ]` for uncompleted, `- [x]` for completed tasks
+  - Supports nested tasks with indentation (2 or 4 spaces)
+  - Completed tasks show strikethrough and gray color
+  - Checkbox markers `[ ]` and `[x]` shown in dimmed gray
+  - Edit text directly to toggle status (standard Markdown behavior)
 - **Edge-triggered Activation**: Move mouse to right edge to toggle panel
 - **Auto-save**: Changes saved automatically after 1 second
 - **Drawer UI**: Slide-in note list overlay
@@ -87,10 +94,13 @@ Or use Xcode: Open `open-sidenotes.xcodeproj` and press Cmd+R to run.
   - Bold: `**text**` or `__text__`
   - Italic: `*text*` or `_text_`
   - Inline code: `` `code` ``
+  - Task lists: `- [ ]` uncompleted, `- [x]` completed
   - Lists: `- item`, `* item`, `1. item`
 - Visual styling:
   - Markdown markers (e.g., `**`, `#`) rendered in smaller, semi-transparent gray
   - Content styled with appropriate fonts and colors
+  - Task list markers `[ ]` and `[x]` dimmed with gray color
+  - Completed tasks (`[x]`) show strikethrough and gray text
   - No deletion of syntax - fully reversible editing
 
 **Main UI (`ContentView.swift`)**
