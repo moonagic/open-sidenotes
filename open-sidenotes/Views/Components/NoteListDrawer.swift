@@ -173,10 +173,12 @@ struct NoteListDrawer: View {
                                 .contextMenu {
                                     Button(action: {
                                         Task {
-                                            if selectedNote?.id == note.id {
-                                                selectedNote = nil
-                                            }
+                                            let isDeletingCurrentNote = selectedNote?.id == note.id
                                             await noteStore.deleteNote(note)
+
+                                            if isDeletingCurrentNote {
+                                                selectedNote = noteStore.notes.first
+                                            }
                                         }
                                     }) {
                                         Label("Delete", systemImage: "trash")
