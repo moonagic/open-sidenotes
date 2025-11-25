@@ -95,6 +95,19 @@ jobs:
         run: |
           COMMITS_RANGE="${LAST_TAG}..HEAD"
 
+          echo "===== DEBUG ====="
+          echo "LAST_TAG: $LAST_TAG"
+          echo "COMMITS_RANGE: $COMMITS_RANGE"
+          echo "Commits in range:"
+          git log $COMMITS_RANGE --oneline
+          echo "Features:"
+          git log $COMMITS_RANGE --grep="^feat" -E --pretty=format:"%s|%h|%H"
+          echo ""
+          echo "Fixes:"
+          git log $COMMITS_RANGE --grep="^fix" -E --pretty=format:"%s|%h|%H"
+          echo ""
+          echo "================="
+
           # Start changelog entry
           CHANGELOG_ENTRY="## [$NEW_VERSION](https://github.com/mlhiter/open-sidenotes/releases/tag/v$NEW_VERSION) ($(date +%Y-%m-%d))\n\n"
 
