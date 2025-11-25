@@ -9,6 +9,7 @@ class MarkdownRenderer {
     private let codeColor = NSColor(red: 0.8, green: 0.2, blue: 0.4, alpha: 1.0)
     private let linkColor = NSColor(red: 0.0, green: 0.48, blue: 1.0, alpha: 1.0)
     private let completedTaskColor = NSColor(red: 0.6, green: 0.6, blue: 0.6, alpha: 1.0)
+    private let quoteColor = NSColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 1.0)
 
     func render(_ markdown: String) -> NSAttributedString {
         guard !markdown.isEmpty else {
@@ -22,15 +23,17 @@ class MarkdownRenderer {
             string: markdown,
             attributes: [
                 .font: baseFont,
-                .foregroundColor: baseColor, 
+                .foregroundColor: baseColor,
                 .paragraphStyle: paragraphStyle
             ]
         )
 
         applyHeadings(to: attributed)
         applyTaskLists(to: attributed)
+        applyQuotes(to: attributed)
         applyBold(to: attributed)
         applyItalic(to: attributed)
+        applyLinks(to: attributed)
         applyInlineCode(to: attributed)
         applyLists(to: attributed)
 
@@ -198,6 +201,73 @@ class MarkdownRenderer {
             let markerRange = match.range(at: 2)
 
             attributed.addAttribute(.foregroundColor, value: markColor, range: markerRange)
+        }
+    }
+
+    private func applyLinks(to attributed: NSMutableAttributedString) {
+        // Match [text](url) format
+        let pattern = "\\[([^\\]]+)\\]\\(([^)]+)\\)"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
+
+        let matches = regex.matches(in: attributed.string, range: NSRange(location: 0, length: attributed.length))
+
+        for match in matches.reversed() {
+            let fullRange = match.range
+            let textRange = match.range(at: 1)
+            let urlRange = match.range(at: 2)
+
+            let linkText = (attributed.string as NSString).substring(with: textRange)
+            let urlString = (attributed.string as NSString).substring(with: urlRange)
+
+            // Create attributed string for the link
+            let linkAttributes: [NSAttributedString.Key: Any] = [
+                .foregroundColor: linkColor,
+                .underlineStyle: NSUnderlineStyle.single.rawValue,
+                .link: urlString,
+                .font: baseFont
+            ]
+
+            let linkAttributedString = NSAttributedString(string: linkText, attributes: linkAttributes)
+            attributed.replaceCharacters(in: fullRange, with: linkAttributedString)
+        }
+    }
+
+    private func applyQuotes(to attributed: NSMutableAttributedString) {
+        let text = attributed.string
+        let lines = text.components(separatedBy: "\n")
+        var offset = 0
+
+        let pattern = "^(>+)\\s+(.+)$"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
+
+        for line in lines {
+            let lineRange = NSRange(location: offset, length: line.count)
+
+            if let match = regex.firstMatch(in: line, range: NSRange(location: 0, length: line.count)) {
+                let markerRange = NSRange(location: offset + match.range(at: 1).location,
+                                        length: match.range(at: 1).length)
+                let contentRange = NSRange(location: offset + match.range(at: 2).location,
+                                          length: match.range(at: 2).length)
+
+                let quoteLevel = match.range(at: 1).length
+                let leftIndent: CGFloat = CGFloat(quoteLevel) * 20.0
+
+                let paragraphStyle = NSMutableParagraphStyle()
+                paragraphStyle.lineSpacing = 6
+                paragraphStyle.firstLineHeadIndent = leftIndent
+                paragraphStyle.headIndent = leftIndent
+
+                // Style the marker
+                let markFont = NSFont.systemFont(ofSize: 12, weight: .regular)
+                attributed.addAttribute(.font, value: markFont, range: markerRange)
+                attributed.addAttribute(.foregroundColor, value: markColor, range: markerRange)
+
+                // Style the content
+                attributed.addAttribute(.foregroundColor, value: quoteColor, range: contentRange)
+                attributed.addAttribute(.paragraphStyle, value: paragraphStyle, range: lineRange)
+            }
+
+            offset += line.count + 1
         }
     }
 }
