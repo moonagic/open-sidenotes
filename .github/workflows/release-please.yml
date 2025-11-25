@@ -1,4 +1,4 @@
-name: Release Please
+name: Auto Release
 
 on:
   push:
@@ -7,43 +7,137 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
-  release-please:
+  release:
     runs-on: ubuntu-latest
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
-      pr: ${{ steps.release.outputs.pr }}
     steps:
-      - uses: googleapis/release-please-action@v4
-        id: release
+      - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-
-      - name: Checkout code
-        if: ${{ steps.release.outputs.pr }}
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update Xcode project version
-        if: ${{ steps.release.outputs.pr }}
+      - name: Check if should release
+        id: check
         run: |
-          NEW_VERSION=$(jq -r '."."' .release-please-manifest.json)
+          # Get last release tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          if [ -z "$LAST_TAG" ]; then
+            echo "No previous tags found, will create initial release"
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check if there are any feat/fix commits since last tag
+          COMMITS=$(git log ${LAST_TAG}..HEAD --oneline --grep="^feat" --grep="^fix" -E)
+
+          if [ -n "$COMMITS" ]; then
+            echo "Found release-worthy commits since $LAST_TAG"
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "No feat/fix commits since $LAST_TAG"
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Determine version bump
+        if: steps.check.outputs.should_release == 'true'
+        id: version
+        run: |
+          # Get current version
+          CURRENT_VERSION=$(cat .release-please-manifest.json | jq -r '."."')
+
+          # Get commits since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            LAST_TAG="HEAD"
+          fi
+
+          # Check for breaking changes
+          if git log ${LAST_TAG}..HEAD --grep="BREAKING CHANGE" --grep="^feat!" --grep="^fix!" -E | grep -q .; then
+            BUMP="major"
+          # Check for features
+          elif git log ${LAST_TAG}..HEAD --grep="^feat" -E | grep -q .; then
+            BUMP="minor"
+          # Otherwise patch
+          else
+            BUMP="patch"
+          fi
+
+          echo "Current version: $CURRENT_VERSION"
+          echo "Bump type: $BUMP"
+
+          # Calculate new version
+          IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
+
+          case $BUMP in
+            major)
+              NEW_VERSION="$((major + 1)).0.0"
+              ;;
+            minor)
+              NEW_VERSION="${major}.$((minor + 1)).0"
+              ;;
+            patch)
+              NEW_VERSION="${major}.${minor}.$((patch + 1))"
+              ;;
+          esac
+
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version will be: $NEW_VERSION"
+
+      - name: Generate CHANGELOG
+        if: steps.check.outputs.should_release == 'true'
+        env:
+          NEW_VERSION: ${{ steps.version.outputs.new_version }}
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          COMMITS_RANGE="${LAST_TAG}..HEAD"
+
+          # Start changelog entry
+          CHANGELOG_ENTRY="## [$NEW_VERSION](https://github.com/mlhiter/open-sidenotes/releases/tag/v$NEW_VERSION) ($(date +%Y-%m-%d))\n\n"
+
+          # Get features
+          FEATURES=$(git log $COMMITS_RANGE --grep="^feat" -E --pretty=format:"- %s ([%h](https://github.com/mlhiter/open-sidenotes/commit/%H))")
+          if [ -n "$FEATURES" ]; then
+            CHANGELOG_ENTRY="${CHANGELOG_ENTRY}### Features\n\n${FEATURES}\n\n"
+          fi
+
+          # Get fixes
+          FIXES=$(git log $COMMITS_RANGE --grep="^fix" -E --pretty=format:"- %s ([%h](https://github.com/mlhiter/open-sidenotes/commit/%H))")
+          if [ -n "$FIXES" ]; then
+            CHANGELOG_ENTRY="${CHANGELOG_ENTRY}### Bug Fixes\n\n${FIXES}\n\n"
+          fi
+
+          # Prepend to CHANGELOG.md
+          if [ -f CHANGELOG.md ]; then
+            # Remove first line "# Changelog" if exists
+            tail -n +2 CHANGELOG.md > CHANGELOG.md.tmp
+            echo -e "# Changelog\n\n${CHANGELOG_ENTRY}$(cat CHANGELOG.md.tmp)" > CHANGELOG.md
+            rm CHANGELOG.md.tmp
+          else
+            echo -e "# Changelog\n\n${CHANGELOG_ENTRY}" > CHANGELOG.md
+          fi
+
+      - name: Update version files
+        if: steps.check.outputs.should_release == 'true'
+        env:
+          NEW_VERSION: ${{ steps.version.outputs.new_version }}
+        run: |
+          # Update manifest
+          echo "{\".\": \"$NEW_VERSION\"}" > .release-please-manifest.json
+
+          # Update Xcode project
           ./scripts/update-version.sh "$NEW_VERSION"
 
-      - name: Commit version update
-        if: ${{ steps.release.outputs.pr }}
+      - name: Commit and tag
+        if: steps.check.outputs.should_release == 'true'
+        env:
+          NEW_VERSION: ${{ steps.version.outputs.new_version }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add open-sidenotes.xcodeproj/project.pbxproj
-          if ! git diff --staged --quiet; then
-            git commit -m "chore: update Xcode project version"
-            git push
-          fi
+
+          git add .release-please-manifest.json CHANGELOG.md open-sidenotes.xcodeproj/project.pbxproj
+          git commit -m "chore: release $NEW_VERSION"
+          git tag "v$NEW_VERSION"
+          git push origin main --tags
