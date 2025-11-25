@@ -4,7 +4,7 @@ struct ContentView: View {
     @StateObject private var noteStore = NoteStore()
     @State private var selectedNote: Note?
     @State private var title: String = ""
-    @State private var content: String = Constants.defaultWelcomeContent
+    @State private var content: String = ""
     @State private var isEditing: Bool = false
     @State private var saveTask: Task<Void, Never>?
     @State private var showDrawer: Bool = false
@@ -62,8 +62,18 @@ struct ContentView: View {
                 try? await Task.sleep(nanoseconds: 100_000_000)
             }
 
-            if let lastNoteID = LastOpenedNoteManager.shared.getLastOpenedNoteID(),
-               let note = noteStore.getNote(by: lastNoteID) {
+            if !OnboardingManager.hasCreatedWelcomeNote() {
+                let welcomeNote = await noteStore.addNote(
+                    title: "Welcome",
+                    content: Constants.defaultWelcomeContent
+                )
+                OnboardingManager.markWelcomeNoteCreated()
+                selectedNote = welcomeNote
+                title = welcomeNote.title
+                content = welcomeNote.content
+                isEditing = true
+            } else if let lastNoteID = LastOpenedNoteManager.shared.getLastOpenedNoteID(),
+                      let note = noteStore.getNote(by: lastNoteID) {
                 selectedNote = note
             }
         }
@@ -93,7 +103,7 @@ struct ContentView: View {
         Task {
             let newNote = await noteStore.addNote(
                 title: "Untitled",
-                content: Constants.defaultWelcomeContent
+                content: ""
             )
 
             selectedNote = newNote
