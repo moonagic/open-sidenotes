@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/mlhiter/open-sidenotes/releases/tag/v0.8.1) (2025-11-25)
+
+### Bug Fixes
+
+- fix: use PAT token to trigger release workflow ([b642677](https://github.com/mlhiter/open-sidenotes/commit/b6426771b4bff6e18b360061e99ddf87b00e5742))
+
+
 ## [0.8.0](https://github.com/mlhiter/open-sidenotes/releases/tag/v0.8.0) (2025-11-25)
 
 ### Features
