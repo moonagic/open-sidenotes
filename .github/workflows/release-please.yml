@@ -53,6 +53,8 @@ jobs:
             LAST_TAG="HEAD"
           fi
 
+          echo "last_tag=$LAST_TAG" >> $GITHUB_OUTPUT
+
           # Check for breaking changes
           if git log ${LAST_TAG}..HEAD --grep="BREAKING CHANGE" --grep="^feat!" --grep="^fix!" -E | grep -q .; then
             BUMP="major"
@@ -89,8 +91,8 @@ jobs:
         if: steps.check.outputs.should_release == 'true'
         env:
           NEW_VERSION: ${{ steps.version.outputs.new_version }}
+          LAST_TAG: ${{ steps.version.outputs.last_tag }}
         run: |
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           COMMITS_RANGE="${LAST_TAG}..HEAD"
 
           # Start changelog entry
