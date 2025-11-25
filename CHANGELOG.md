@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.9.2](https://github.com/mlhiter/open-sidenotes/releases/tag/v0.9.2) (2025-11-25)
+
+
 ## [0.9.1](https://github.com/mlhiter/open-sidenotes/releases/tag/v0.9.1) (2025-11-25)
 
 
