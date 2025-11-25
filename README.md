@@ -15,6 +15,12 @@
 
 ---
 
+## Preview
+
+<div align="center">
+<img src="screenshot.png" alt="Open Sidenotes Screenshot" width="800">
+</div>
+
 ## Features
 
 - **Edge Activation** — Move your mouse to the right edge of the screen to reveal the notes panel
