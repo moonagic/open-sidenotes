@@ -16,9 +16,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var windowController: SideNotesWindowController?
     var onboardingWindowController: OnboardingWindowController?
     var settingsWindowController: SettingsWindowController?
+    var statusItem: NSStatusItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         updateDockIconVisibility()
+        setupMenuBar()
 
         windowController = SideNotesWindowController()
 
@@ -107,5 +109,51 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 await updateService.checkForUpdates(silent: true)
             }
         }
+    }
+
+    private func setupMenuBar() {
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+
+        if let button = statusItem?.button {
+            button.image = NSImage(systemSymbolName: "note.text", accessibilityDescription: "Open Sidenotes")
+        }
+
+        let menu = NSMenu()
+
+        menu.addItem(NSMenuItem(
+            title: "Toggle Window",
+            action: #selector(toggleWindow),
+            keyEquivalent: ""
+        ))
+
+        menu.addItem(NSMenuItem.separator())
+
+        menu.addItem(NSMenuItem(
+            title: "Settings...",
+            action: #selector(openSettings),
+            keyEquivalent: ","
+        ))
+
+        menu.addItem(NSMenuItem.separator())
+
+        menu.addItem(NSMenuItem(
+            title: "Quit Sidenotes",
+            action: #selector(quitApp),
+            keyEquivalent: "q"
+        ))
+
+        statusItem?.menu = menu
+    }
+
+    @objc private func toggleWindow() {
+        windowController?.toggleWindow()
+    }
+
+    @objc private func openSettings() {
+        showSettings()
+    }
+
+    @objc private func quitApp() {
+        NSApplication.shared.terminate(nil)
     }
 }
