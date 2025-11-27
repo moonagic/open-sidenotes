@@ -2,7 +2,11 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var noteStore = NoteStore()
+    @StateObject private var todoStore = TodoStore()
+    @StateObject private var listStore = TodoListStore()
+    @State private var activeTab: String = "notes"
     @State private var selectedNote: Note?
+    @State private var selectedList: TodoList?
     @State private var editingNoteId: UUID?
     @State private var editingTitle: String = ""
     @State private var editingContent: String = ""
@@ -16,25 +20,54 @@ struct ContentView: View {
 
     var body: some View {
         ZStack(alignment: .leading) {
-            NoteEditorView(
-                noteStore: noteStore,
-                selectedNote: $selectedNote,
-                isEditing: .constant(isEditing),
-                title: $editingTitle,
-                content: $editingContent,
-                onToggleDrawer: {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        showDrawer.toggle()
+            if activeTab == "notes" {
+                NoteEditorView(
+                    noteStore: noteStore,
+                    selectedNote: $selectedNote,
+                    isEditing: .constant(isEditing),
+                    title: $editingTitle,
+                    content: $editingContent,
+                    onToggleDrawer: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showDrawer.toggle()
+                        }
                     }
-                }
-            )
+                )
+            } else {
+                TodoListDetailView(
+                    listStore: listStore,
+                    todoStore: todoStore,
+                    selectedList: $selectedList,
+                    onToggleDrawer: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showDrawer.toggle()
+                        }
+                    }
+                )
+            }
 
             if showDrawer {
                 NoteListDrawer(
                     noteStore: noteStore,
+                    todoStore: todoStore,
+                    listStore: listStore,
+                    activeTab: $activeTab,
                     selectedNote: $selectedNote,
+                    selectedList: $selectedList,
                     onNewNote: {
                         createNewNote()
+                    },
+                    onNewTodo: {
+                        Task {
+                            if let list = selectedList {
+                                await listStore.createList(name: "New List")
+                            }
+                        }
+                    },
+                    onToggleTodoCompletion: { todo in
+                        Task {
+                            await todoStore.toggleCompletion(todo)
+                        }
                     },
                     onClose: {
                         withAnimation(.easeInOut(duration: 0.2)) {
@@ -69,6 +102,16 @@ struct ContentView: View {
                 try? await Task.sleep(nanoseconds: 100_000_000)
             }
 
+            while todoStore.isLoading {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+
+            while listStore.isLoading {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+
+            let inbox = await listStore.ensureInboxExists()
+
             if !OnboardingManager.hasCreatedWelcomeNote() {
                 let welcomeNote = await noteStore.addNote(
                     title: "Welcome",
@@ -79,6 +122,10 @@ struct ContentView: View {
             } else if let lastNoteID = LastOpenedNoteManager.shared.getLastOpenedNoteID(),
                       let note = noteStore.getNote(by: lastNoteID) {
                 selectedNote = note
+            }
+
+            if selectedList == nil {
+                selectedList = inbox
             }
         }
     }
@@ -165,6 +212,7 @@ struct ContentView: View {
             selectedNote = newNote
         }
     }
+
 }
 
 #Preview {

@@ -2,8 +2,14 @@ import SwiftUI
 
 struct NoteListDrawer: View {
     @ObservedObject var noteStore: NoteStore
+    @ObservedObject var todoStore: TodoStore
+    @ObservedObject var listStore: TodoListStore
+    @Binding var activeTab: String
     @Binding var selectedNote: Note?
+    @Binding var selectedList: TodoList?
     var onNewNote: () -> Void
+    var onNewTodo: () -> Void
+    var onToggleTodoCompletion: (Todo) -> Void
     var onClose: () -> Void
     var onOpenSettings: () -> Void
 
@@ -38,9 +44,17 @@ struct NoteListDrawer: View {
 
             // Drawer content
             VStack(alignment: .leading, spacing: 0) {
+                TabSwitchView(
+                    activeTab: $activeTab,
+                    tabs: [
+                        (id: "notes", label: "NOTES"),
+                        (id: "tasks", label: "TASKS")
+                    ]
+                )
+
                 // Header
                 HStack(alignment: .center) {
-                    Text("NOTES")
+                    Text(activeTab == "notes" ? "NOTES" : "TASKS")
                         .font(.system(size: 13, weight: .medium))
                         .tracking(0.5)
                         .foregroundColor(Color(hex: "888888"))
@@ -48,7 +62,11 @@ struct NoteListDrawer: View {
                     Spacer()
 
                     Button(action: {
-                        onNewNote()
+                        if activeTab == "notes" {
+                            onNewNote()
+                        } else {
+                            onNewTodo()
+                        }
                         onClose()
                     }) {
                         Image(systemName: "plus")
@@ -68,47 +86,49 @@ struct NoteListDrawer: View {
                 Divider()
                     .background(Color(hex: "E8E8E8"))
 
-                // Search bar
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 13))
-                        .foregroundColor(Color(hex: "888888"))
+                // Content based on active tab
+                if activeTab == "notes" {
+                    // Search bar
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 13))
+                            .foregroundColor(Color(hex: "888888"))
 
-                    TextField("Search notes...", text: $searchText)
-                        .textFieldStyle(PlainTextFieldStyle())
-                        .font(.system(size: 13))
-                        .foregroundColor(Color(hex: "2C2C2C"))
-                        .focused($isSearchFocused)
-                        .onChange(of: searchText) { newValue in
-                            searchTask?.cancel()
-                            let task = DispatchWorkItem {
-                                debouncedSearch = newValue
+                        TextField("Search notes...", text: $searchText)
+                            .textFieldStyle(PlainTextFieldStyle())
+                            .font(.system(size: 13))
+                            .foregroundColor(Color(hex: "2C2C2C"))
+                            .focused($isSearchFocused)
+                            .onChange(of: searchText) { newValue in
+                                searchTask?.cancel()
+                                let task = DispatchWorkItem {
+                                    debouncedSearch = newValue
+                                }
+                                searchTask = task
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: task)
                             }
-                            searchTask = task
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: task)
-                        }
 
-                    if !searchText.isEmpty {
-                        Button(action: {
-                            searchText = ""
-                            debouncedSearch = ""
-                        }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 13))
-                                .foregroundColor(Color(hex: "888888"))
+                        if !searchText.isEmpty {
+                            Button(action: {
+                                searchText = ""
+                                debouncedSearch = ""
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(Color(hex: "888888"))
+                            }
+                            .buttonStyle(PlainButtonStyle())
                         }
-                        .buttonStyle(PlainButtonStyle())
                     }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(Color(hex: "F5F5F5"))
-                .cornerRadius(8)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color(hex: "F5F5F5"))
+                    .cornerRadius(8)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
 
-                // Notes list
-                if noteStore.isLoading {
+                    // Notes list
+                    if noteStore.isLoading {
                     Spacer()
                     ProgressView()
                         .frame(maxWidth: .infinity)
@@ -188,6 +208,14 @@ struct NoteListDrawer: View {
                         }
                         .padding(.vertical, 8)
                     }
+                }
+                } else {
+                    TodoListListView(
+                        listStore: listStore,
+                        todoStore: todoStore,
+                        selectedList: $selectedList,
+                        onClose: onClose
+                    )
                 }
 
                 Divider()
@@ -408,13 +436,23 @@ struct RoundedCorner: Shape {
 }
 
 #Preview {
+    @Previewable @State var activeTab = "notes"
     @Previewable @State var selectedNote: Note? = nil
+    @Previewable @State var selectedList: TodoList? = nil
     let noteStore = NoteStore()
+    let todoStore = TodoStore()
+    let listStore = TodoListStore()
 
     return NoteListDrawer(
         noteStore: noteStore,
+        todoStore: todoStore,
+        listStore: listStore,
+        activeTab: $activeTab,
         selectedNote: $selectedNote,
+        selectedList: $selectedList,
         onNewNote: {},
+        onNewTodo: {},
+        onToggleTodoCompletion: { _ in },
         onClose: {},
         onOpenSettings: {}
     )
