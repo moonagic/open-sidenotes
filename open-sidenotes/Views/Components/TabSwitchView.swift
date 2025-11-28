@@ -31,22 +31,17 @@ struct TabSwitchView: View {
             .padding(.horizontal, 20)
             .padding(.top, 16)
 
-            ZStack(alignment: .leading) {
+            GeometryReader { geometry in
+                let tabWidth = (geometry.size.width - 40 - CGFloat((tabs.count - 1) * 24)) / CGFloat(tabs.count)
+                let selectedIndex = tabs.firstIndex(where: { $0.id == activeTab }) ?? 0
+                let offset = 20 + CGFloat(selectedIndex) * (tabWidth + 24)
+
                 Rectangle()
-                    .fill(Color(hex: "E8E8E8"))
-                    .frame(height: 1)
-
-                GeometryReader { geometry in
-                    let tabWidth = (geometry.size.width - 40) / CGFloat(tabs.count)
-                    let selectedIndex = tabs.firstIndex(where: { $0.id == activeTab }) ?? 0
-
-                    Rectangle()
-                        .fill(Color(hex: "7C9885"))
-                        .frame(width: tabWidth, height: 2)
-                        .offset(x: 20 + CGFloat(selectedIndex) * tabWidth)
-                }
-                .frame(height: 2)
+                    .fill(Color(hex: "7C9885"))
+                    .frame(width: tabWidth, height: 2)
+                    .offset(x: offset)
             }
+            .frame(height: 2)
         }
     }
 }

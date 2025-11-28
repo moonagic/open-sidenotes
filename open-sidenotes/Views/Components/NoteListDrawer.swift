@@ -53,38 +53,43 @@ struct NoteListDrawer: View {
                 )
 
                 // Header
-                HStack(alignment: .center) {
-                    Text(activeTab == "notes" ? "NOTES" : "TASKS")
-                        .font(.system(size: 13, weight: .medium))
-                        .tracking(0.5)
-                        .foregroundColor(Color(hex: "888888"))
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(alignment: .center) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(activeTab == "notes" ? "NOTES" : "TASKS")
+                                .font(.system(size: 13, weight: .medium))
+                                .tracking(0.5)
+                                .foregroundColor(Color(hex: "888888"))
 
-                    Spacer()
-
-                    Button(action: {
-                        if activeTab == "notes" {
-                            onNewNote()
-                        } else {
-                            onNewTodo()
+                            Rectangle()
+                                .fill(Color(hex: "E8E8E8"))
+                                .frame(width: activeTab == "notes" ? 45 : 42, height: 1)
                         }
-                        onClose()
-                    }) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(Color(hex: "7C9885"))
-                            .frame(width: 32, height: 32)
-                            .background(
-                                Circle()
-                                    .fill(Color(hex: "7C9885").opacity(0.1))
-                            )
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 16)
 
-                Divider()
-                    .background(Color(hex: "E8E8E8"))
+                        Spacer()
+
+                        Button(action: {
+                            if activeTab == "notes" {
+                                onNewNote()
+                            } else {
+                                onNewTodo()
+                            }
+                            onClose()
+                        }) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(Color(hex: "7C9885"))
+                                .frame(width: 32, height: 32)
+                                .background(
+                                    Circle()
+                                        .fill(Color(hex: "7C9885").opacity(0.1))
+                                )
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
+                }
 
                 // Content based on active tab
                 if activeTab == "notes" {
