@@ -15,34 +15,49 @@ class TodoStore: ObservableObject {
     private let fileStorage = TodoStorageService.shared
 
     init() {
+        print("\n🏗️ [TodoStore] Initializing TodoStore")
         Task {
             await loadTodos()
         }
     }
 
     func loadTodos() async {
+        print("\n📋 [TodoStore] Starting loadTodos")
         isLoading = true
         errorMessage = nil
 
         do {
             todos = try await fileStorage.loadAllTodos()
+            print("\n✅ [TodoStore] Loaded \(todos.count) total todos")
+            for todo in todos {
+                print("  - Todo '\(todo.title)' (id: \(todo.id)) in list \(todo.listId)")
+            }
         } catch {
             errorMessage = "Failed to load todos: \(error.localizedDescription)"
-            print("Error loading todos: \(error)")
+            print("❌ [TodoStore] Error loading todos: \(error)")
         }
 
         isLoading = false
+        print("📋 [TodoStore] isLoading = false, loadTodos completed\n")
     }
 
     func addTodo(listId: UUID, title: String, description: String = "", priority: Todo.Priority = .medium, tags: [String] = []) async -> Todo {
         let todo = Todo(listId: listId, title: title, description: description, priority: priority, tags: tags)
+        print("➕ [TodoStore] Adding todo: \(todo.title) to list \(listId)")
         todos.insert(todo, at: 0)
+        print("📊 [TodoStore] Total todos in store: \(todos.count)")
         await saveTodo(todo)
         return todo
     }
 
     func todos(for listId: UUID) -> [Todo] {
-        todos.filter { $0.listId == listId }
+        let filtered = todos.filter { $0.listId == listId }
+        print("🔍 [TodoStore] Getting todos for list \(listId): found \(filtered.count) todos")
+        print("🔍 [TodoStore] Total todos in store: \(todos.count)")
+        for todo in filtered {
+            print("  - \(todo.title) (id: \(todo.id))")
+        }
+        return filtered
     }
 
     func updateTodo(_ todo: Todo, title: String, description: String, isCompleted: Bool? = nil, priority: Todo.Priority? = nil, tags: [String]? = nil) async {

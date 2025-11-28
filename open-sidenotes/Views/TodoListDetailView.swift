@@ -10,8 +10,16 @@ struct TodoListDetailView: View {
     @FocusState private var isInputFocused: Bool
 
     private var tasks: [Todo] {
-        guard let list = selectedList else { return [] }
-        return todoStore.todos(for: list.id)
+        print("\n🎯 [TodoListDetailView] Computing tasks property")
+        guard let list = selectedList else {
+            print("⚠️ [TodoListDetailView] No list selected")
+            return []
+        }
+        print("📋 [TodoListDetailView] Selected list: \(list.name) (id: \(list.id))")
+        print("📊 [TodoListDetailView] Total todos in store: \(todoStore.todos.count)")
+        let tasks = todoStore.todos(for: list.id)
+        print("✅ [TodoListDetailView] Returning \(tasks.count) tasks for this list\n")
+        return tasks
     }
 
     var body: some View {
@@ -130,10 +138,15 @@ struct TodoListDetailView: View {
     }
 
     private func quickAddTask() async {
-        guard let list = selectedList, !quickAddText.isEmpty else { return }
+        guard let list = selectedList, !quickAddText.isEmpty else {
+            print("⚠️ [TodoListDetailView] Cannot add task: list=\(selectedList?.name ?? "nil"), text=\(quickAddText)")
+            return
+        }
+        print("➕ [TodoListDetailView] Adding task '\(quickAddText)' to list \(list.name) (id: \(list.id))")
         await todoStore.addTodo(listId: list.id, title: quickAddText)
         quickAddText = ""
         isInputFocused = true
+        print("✅ [TodoListDetailView] Task added successfully")
     }
 }
 

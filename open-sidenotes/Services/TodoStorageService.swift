@@ -21,9 +21,15 @@ class TodoStorageService {
 
     private init() {
         createStorageDirectoryIfNeeded()
+        Task {
+            await migrateOldTodoFiles()
+        }
     }
 
     func loadAllTodos() async throws -> [Todo] {
+        print("\n📁 [TodoStorage] Starting loadAllTodos")
+        print("📁 [TodoStorage] Storage directory: \(storageDirectory.path)")
+
         var allTodos: [Todo] = []
 
         let contents = try fileManager.contentsOfDirectory(
@@ -32,11 +38,18 @@ class TodoStorageService {
             options: [.skipsHiddenFiles]
         )
 
+        print("📁 [TodoStorage] Found \(contents.count) items in storage directory")
+
         for item in contents {
             var isDirectory: ObjCBool = false
             guard fileManager.fileExists(atPath: item.path, isDirectory: &isDirectory),
                   isDirectory.boolValue,
-                  item.lastPathComponent != ".lists" else { continue }
+                  item.lastPathComponent != ".lists" else {
+                print("📁 [TodoStorage] Skipping item: \(item.lastPathComponent)")
+                continue
+            }
+
+            print("📁 [TodoStorage] Scanning list directory: \(item.lastPathComponent)")
 
             let fileURLs = try fileManager.contentsOfDirectory(
                 at: item,
@@ -44,10 +57,19 @@ class TodoStorageService {
                 options: [.skipsHiddenFiles]
             ).filter { $0.pathExtension == "md" }
 
+            print("📁 [TodoStorage] Found \(fileURLs.count) .md files in \(item.lastPathComponent)")
+
             let todos = try await withThrowingTaskGroup(of: Todo?.self) { group in
                 for fileURL in fileURLs {
                     group.addTask {
-                        try? await self.loadTodo(from: fileURL)
+                        do {
+                            let todo = try await self.loadTodo(from: fileURL)
+                            print("  ✅ [TodoStorage] Loaded todo: \(todo.title) (id: \(todo.id)) from \(fileURL.lastPathComponent)")
+                            return todo
+                        } catch {
+                            print("  ❌ [TodoStorage] Failed to load \(fileURL.lastPathComponent): \(error)")
+                            return nil
+                        }
                     }
                 }
 
@@ -61,84 +83,41 @@ class TodoStorageService {
             }
 
             allTodos.append(contentsOf: todos)
+            print("📁 [TodoStorage] Loaded \(todos.count) todos from \(item.lastPathComponent)")
+        }
+
+        print("📁 [TodoStorage] Total todos loaded: \(allTodos.count)")
+        for todo in allTodos {
+            print("  - \(todo.title) (listId: \(todo.listId), id: \(todo.id))")
         }
 
         return allTodos.sorted { $0.updatedAt > $1.updatedAt }
     }
 
     func saveTodo(_ todo: Todo) async throws {
-        try? await removeOldFile(for: todo)
-
         let fileURL = fileURL(for: todo)
+        print("💾 [TodoStorage] Saving todo: \(todo.title) (id: \(todo.id))")
+        print("💾 [TodoStorage] File path: \(fileURL.path)")
         let content = formatTodoContent(todo)
         try content.write(to: fileURL, atomically: true, encoding: .utf8)
+        print("✅ [TodoStorage] Saved successfully")
     }
 
     func deleteTodo(_ todo: Todo) async throws {
-        if let existingURL = findFile(byId: todo.id) {
-            try fileManager.removeItem(at: existingURL)
+        let fileURL = fileURL(for: todo)
+        print("🗑️ [TodoStorage] Deleting todo: \(todo.title) (id: \(todo.id))")
+        print("🗑️ [TodoStorage] File path: \(fileURL.path)")
+        if fileManager.fileExists(atPath: fileURL.path) {
+            try fileManager.removeItem(at: fileURL)
+            print("✅ [TodoStorage] Deleted successfully")
+        } else {
+            print("⚠️ [TodoStorage] File not found, nothing to delete")
         }
     }
 
     func fileURL(for todo: Todo) -> URL {
         let listDir = TodoListStorageService.shared.taskDirectory(for: todo.listId)
-        let safeName = sanitizeFileName(todo.title)
-        let baseName = safeName.isEmpty ? "Untitled" : safeName
-        return uniqueFileURL(baseName: baseName, todoId: todo.id, in: listDir)
-    }
-
-    private func sanitizeFileName(_ name: String) -> String {
-        let illegal = CharacterSet(charactersIn: "/\\:*?\"<>|")
-        let sanitized = name.components(separatedBy: illegal).joined()
-        return sanitized.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func uniqueFileURL(baseName: String, todoId: UUID, in directory: URL) -> URL {
-        let baseURL = directory.appendingPathComponent("\(baseName).md")
-
-        if !fileManager.fileExists(atPath: baseURL.path) {
-            return baseURL
-        }
-
-        if let existingTodo = try? loadTodoSync(from: baseURL), existingTodo.id == todoId {
-            return baseURL
-        }
-
-        var counter = 1
-        while true {
-            let url = directory.appendingPathComponent("\(baseName) \(counter).md")
-            if !fileManager.fileExists(atPath: url.path) {
-                return url
-            }
-            if let existingTodo = try? loadTodoSync(from: url), existingTodo.id == todoId {
-                return url
-            }
-            counter += 1
-        }
-    }
-
-    private func findFile(byId id: UUID) -> URL? {
-        guard let files = try? fileManager.contentsOfDirectory(
-            at: storageDirectory,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        ).filter({ $0.pathExtension == "md" }) else { return nil }
-
-        for file in files {
-            if let todo = try? loadTodoSync(from: file), todo.id == id {
-                return file
-            }
-        }
-        return nil
-    }
-
-    private func removeOldFile(for todo: Todo) async throws {
-        guard let oldURL = findFile(byId: todo.id) else { return }
-        let newURL = fileURL(for: todo)
-
-        if oldURL != newURL {
-            try fileManager.removeItem(at: oldURL)
-        }
+        return listDir.appendingPathComponent("\(todo.id.uuidString).md")
     }
 
     private func loadTodoSync(from fileURL: URL) throws -> Todo {
@@ -172,13 +151,14 @@ class TodoStorageService {
     }
 
     private func parseTodoContent(_ content: String, fileURL: URL) -> Todo {
-        let components = content.components(separatedBy: "---")
-
+        let fileId = UUID(uuidString: fileURL.deletingPathExtension().lastPathComponent) ?? UUID()
         let listId = UUID(uuidString: fileURL.deletingLastPathComponent().lastPathComponent) ?? UUID()
+
+        let components = content.components(separatedBy: "---")
 
         guard components.count >= 3 else {
             return Todo(
-                id: UUID(uuidString: fileURL.deletingPathExtension().lastPathComponent) ?? UUID(),
+                id: fileId,
                 listId: listId,
                 title: "Untitled",
                 description: content
@@ -189,8 +169,6 @@ class TodoStorageService {
         let description = components[2...].joined(separator: "---").trimmingCharacters(in: .whitespacesAndNewlines)
 
         var title = "Untitled"
-        var id = UUID()
-        var parsedListId: UUID?
         var isCompleted = false
         var priority: Todo.Priority = .medium
         var tags: [String] = []
@@ -208,10 +186,6 @@ class TodoStorageService {
             switch key {
             case "title":
                 title = value
-            case "id":
-                id = UUID(uuidString: value) ?? UUID()
-            case "listId":
-                parsedListId = UUID(uuidString: value)
             case "isCompleted":
                 isCompleted = value.lowercased() == "true"
             case "priority":
@@ -228,8 +202,8 @@ class TodoStorageService {
         }
 
         return Todo(
-            id: id,
-            listId: parsedListId ?? listId,
+            id: fileId,
+            listId: listId,
             title: title,
             description: description,
             isCompleted: isCompleted,
@@ -247,6 +221,76 @@ class TodoStorageService {
                 withIntermediateDirectories: true,
                 attributes: nil
             )
+        }
+    }
+
+    private func migrateOldTodoFiles() async {
+        let migrationKey = "hasMigratedTodoFilesToUUID_v1"
+        guard !UserDefaults.standard.bool(forKey: migrationKey) else {
+            print("✅ [Migration] Todo files already migrated, skipping")
+            return
+        }
+
+        print("\n🔄 [Migration] Starting todo file migration...")
+
+        do {
+            let contents = try fileManager.contentsOfDirectory(
+                at: storageDirectory,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
+
+            for item in contents {
+                var isDirectory: ObjCBool = false
+                guard fileManager.fileExists(atPath: item.path, isDirectory: &isDirectory),
+                      isDirectory.boolValue,
+                      item.lastPathComponent != ".lists" else { continue }
+
+                let fileURLs = try fileManager.contentsOfDirectory(
+                    at: item,
+                    includingPropertiesForKeys: nil,
+                    options: [.skipsHiddenFiles]
+                ).filter { $0.pathExtension == "md" }
+
+                for oldFileURL in fileURLs {
+                    let content = try String(contentsOf: oldFileURL, encoding: .utf8)
+                    let components = content.components(separatedBy: "---")
+
+                    guard components.count >= 3 else { continue }
+
+                    let frontMatter = components[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                    let lines = frontMatter.components(separatedBy: .newlines)
+
+                    var todoId: UUID?
+                    for line in lines {
+                        let parts = line.components(separatedBy: ": ")
+                        guard parts.count == 2 else { continue }
+                        if parts[0].trimmingCharacters(in: .whitespaces) == "id",
+                           let id = UUID(uuidString: parts[1].trimmingCharacters(in: .whitespaces)) {
+                            todoId = id
+                            break
+                        }
+                    }
+
+                    if let todoId = todoId {
+                        let newFileURL = item.appendingPathComponent("\(todoId.uuidString).md")
+                        if oldFileURL != newFileURL {
+                            if fileManager.fileExists(atPath: newFileURL.path) {
+                                try fileManager.removeItem(at: oldFileURL)
+                                print("  ⚠️ [Migration] Removed duplicate: \(oldFileURL.lastPathComponent)")
+                            } else {
+                                try fileManager.moveItem(at: oldFileURL, to: newFileURL)
+                                print("  ✅ [Migration] Migrated: \(oldFileURL.lastPathComponent) → \(newFileURL.lastPathComponent)")
+                            }
+                        }
+                    }
+                }
+            }
+
+            UserDefaults.standard.set(true, forKey: migrationKey)
+            print("✅ [Migration] Todo file migration completed\n")
+        } catch {
+            print("❌ [Migration] Migration failed: \(error)\n")
         }
     }
 }

@@ -97,20 +97,34 @@ struct ContentView: View {
                 scheduleAutoSave()
             }
         }
+        .onChange(of: selectedList) { newList in
+            if let list = newList {
+                LastOpenedTodoListManager.shared.saveLastOpenedList(list.id)
+            }
+        }
         .task {
+            print("\n🚀 [ContentView] Starting initialization task")
+
+            print("⏳ [ContentView] Waiting for noteStore to load...")
             while noteStore.isLoading {
                 try? await Task.sleep(nanoseconds: 100_000_000)
             }
+            print("✅ [ContentView] noteStore loaded")
 
+            print("⏳ [ContentView] Waiting for todoStore to load...")
             while todoStore.isLoading {
                 try? await Task.sleep(nanoseconds: 100_000_000)
             }
+            print("✅ [ContentView] todoStore loaded, total todos: \(todoStore.todos.count)")
 
+            print("⏳ [ContentView] Waiting for listStore to load...")
             while listStore.isLoading {
                 try? await Task.sleep(nanoseconds: 100_000_000)
             }
+            print("✅ [ContentView] listStore loaded, total lists: \(listStore.lists.count)")
 
             let inbox = await listStore.ensureInboxExists()
+            print("📥 [ContentView] Inbox ID: \(inbox.id)")
 
             if !OnboardingManager.hasCreatedWelcomeNote() {
                 let welcomeNote = await noteStore.addNote(
@@ -124,9 +138,22 @@ struct ContentView: View {
                 selectedNote = note
             }
 
-            if selectedList == nil {
+            if let lastListID = LastOpenedTodoListManager.shared.getLastOpenedListID() {
+                print("📌 [ContentView] Restoring last opened list: \(lastListID)")
+                if let list = listStore.getList(by: lastListID) {
+                    print("✅ [ContentView] Found last list: \(list.name)")
+                    selectedList = list
+                } else {
+                    print("⚠️ [ContentView] Last list not found, using inbox")
+                    selectedList = inbox
+                }
+            } else {
+                print("📥 [ContentView] No last list, using inbox")
                 selectedList = inbox
             }
+
+            print("📝 [ContentView] Selected list: \(selectedList?.name ?? "none") (id: \(selectedList?.id.uuidString ?? "none"))")
+            print("🏁 [ContentView] Initialization completed\n")
         }
     }
 
