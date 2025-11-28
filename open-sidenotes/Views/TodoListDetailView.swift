@@ -10,16 +10,10 @@ struct TodoListDetailView: View {
     @FocusState private var isInputFocused: Bool
 
     private var tasks: [Todo] {
-        print("\n🎯 [TodoListDetailView] Computing tasks property")
         guard let list = selectedList else {
-            print("⚠️ [TodoListDetailView] No list selected")
             return []
         }
-        print("📋 [TodoListDetailView] Selected list: \(list.name) (id: \(list.id))")
-        print("📊 [TodoListDetailView] Total todos in store: \(todoStore.todos.count)")
-        let tasks = todoStore.todos(for: list.id)
-        print("✅ [TodoListDetailView] Returning \(tasks.count) tasks for this list\n")
-        return tasks
+        return todoStore.todos(for: list.id)
     }
 
     var body: some View {
@@ -139,20 +133,18 @@ struct TodoListDetailView: View {
 
     private func quickAddTask() async {
         guard let list = selectedList, !quickAddText.isEmpty else {
-            print("⚠️ [TodoListDetailView] Cannot add task: list=\(selectedList?.name ?? "nil"), text=\(quickAddText)")
             return
         }
-        print("➕ [TodoListDetailView] Adding task '\(quickAddText)' to list \(list.name) (id: \(list.id))")
         await todoStore.addTodo(listId: list.id, title: quickAddText)
         quickAddText = ""
         isInputFocused = true
-        print("✅ [TodoListDetailView] Task added successfully")
     }
 }
 
 struct SimpleTaskRow: View {
     let task: Todo
     @ObservedObject var todoStore: TodoStore
+    @State private var isHovered: Bool = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -181,6 +173,18 @@ struct SimpleTaskRow: View {
 
             Spacer()
 
+            if isHovered {
+                Button(action: {
+                    Task { await todoStore.deleteTodo(task) }
+                }) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 13))
+                        .foregroundColor(Color(hex: "888888"))
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+
             Menu {
                 ForEach(Todo.Priority.allCases, id: \.self) { priority in
                     Button(action: {
@@ -203,6 +207,9 @@ struct SimpleTaskRow: View {
         .padding(.horizontal, 24)
         .padding(.vertical, 12)
         .contentShape(Rectangle())
+        .onHover { hovering in
+            isHovered = hovering
+        }
     }
 
     private func updatePriority(_ priority: Todo.Priority) async {

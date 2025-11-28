@@ -22,7 +22,6 @@ class NoteStore: ObservableObject {
             notes = try await fileStorage.loadAllNotes()
         } catch {
             errorMessage = "Failed to load notes: \(error.localizedDescription)"
-            print("Error loading notes: \(error)")
         }
 
         isLoading = false
@@ -51,7 +50,6 @@ class NoteStore: ObservableObject {
             try await fileStorage.deleteNote(note)
         } catch {
             errorMessage = "Failed to delete note: \(error.localizedDescription)"
-            print("Error deleting note: \(error)")
         }
     }
 
@@ -64,7 +62,6 @@ class NoteStore: ObservableObject {
             try await fileStorage.saveNote(note)
         } catch {
             errorMessage = "Failed to save note: \(error.localizedDescription)"
-            print("Error saving note: \(error)")
         }
     }
 }

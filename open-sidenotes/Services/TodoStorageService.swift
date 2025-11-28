@@ -27,9 +27,6 @@ class TodoStorageService {
     }
 
     func loadAllTodos() async throws -> [Todo] {
-        print("\n📁 [TodoStorage] Starting loadAllTodos")
-        print("📁 [TodoStorage] Storage directory: \(storageDirectory.path)")
-
         var allTodos: [Todo] = []
 
         let contents = try fileManager.contentsOfDirectory(
@@ -38,18 +35,13 @@ class TodoStorageService {
             options: [.skipsHiddenFiles]
         )
 
-        print("📁 [TodoStorage] Found \(contents.count) items in storage directory")
-
         for item in contents {
             var isDirectory: ObjCBool = false
             guard fileManager.fileExists(atPath: item.path, isDirectory: &isDirectory),
                   isDirectory.boolValue,
                   item.lastPathComponent != ".lists" else {
-                print("📁 [TodoStorage] Skipping item: \(item.lastPathComponent)")
                 continue
             }
-
-            print("📁 [TodoStorage] Scanning list directory: \(item.lastPathComponent)")
 
             let fileURLs = try fileManager.contentsOfDirectory(
                 at: item,
@@ -57,17 +49,13 @@ class TodoStorageService {
                 options: [.skipsHiddenFiles]
             ).filter { $0.pathExtension == "md" }
 
-            print("📁 [TodoStorage] Found \(fileURLs.count) .md files in \(item.lastPathComponent)")
-
             let todos = try await withThrowingTaskGroup(of: Todo?.self) { group in
                 for fileURL in fileURLs {
                     group.addTask {
                         do {
                             let todo = try await self.loadTodo(from: fileURL)
-                            print("  ✅ [TodoStorage] Loaded todo: \(todo.title) (id: \(todo.id)) from \(fileURL.lastPathComponent)")
                             return todo
                         } catch {
-                            print("  ❌ [TodoStorage] Failed to load \(fileURL.lastPathComponent): \(error)")
                             return nil
                         }
                     }
@@ -83,12 +71,6 @@ class TodoStorageService {
             }
 
             allTodos.append(contentsOf: todos)
-            print("📁 [TodoStorage] Loaded \(todos.count) todos from \(item.lastPathComponent)")
-        }
-
-        print("📁 [TodoStorage] Total todos loaded: \(allTodos.count)")
-        for todo in allTodos {
-            print("  - \(todo.title) (listId: \(todo.listId), id: \(todo.id))")
         }
 
         return allTodos.sorted { $0.updatedAt > $1.updatedAt }
@@ -96,22 +78,14 @@ class TodoStorageService {
 
     func saveTodo(_ todo: Todo) async throws {
         let fileURL = fileURL(for: todo)
-        print("💾 [TodoStorage] Saving todo: \(todo.title) (id: \(todo.id))")
-        print("💾 [TodoStorage] File path: \(fileURL.path)")
         let content = formatTodoContent(todo)
         try content.write(to: fileURL, atomically: true, encoding: .utf8)
-        print("✅ [TodoStorage] Saved successfully")
     }
 
     func deleteTodo(_ todo: Todo) async throws {
         let fileURL = fileURL(for: todo)
-        print("🗑️ [TodoStorage] Deleting todo: \(todo.title) (id: \(todo.id))")
-        print("🗑️ [TodoStorage] File path: \(fileURL.path)")
         if fileManager.fileExists(atPath: fileURL.path) {
             try fileManager.removeItem(at: fileURL)
-            print("✅ [TodoStorage] Deleted successfully")
-        } else {
-            print("⚠️ [TodoStorage] File not found, nothing to delete")
         }
     }
 
@@ -227,11 +201,8 @@ class TodoStorageService {
     private func migrateOldTodoFiles() async {
         let migrationKey = "hasMigratedTodoFilesToUUID_v1"
         guard !UserDefaults.standard.bool(forKey: migrationKey) else {
-            print("✅ [Migration] Todo files already migrated, skipping")
             return
         }
-
-        print("\n🔄 [Migration] Starting todo file migration...")
 
         do {
             let contents = try fileManager.contentsOfDirectory(
@@ -277,10 +248,8 @@ class TodoStorageService {
                         if oldFileURL != newFileURL {
                             if fileManager.fileExists(atPath: newFileURL.path) {
                                 try fileManager.removeItem(at: oldFileURL)
-                                print("  ⚠️ [Migration] Removed duplicate: \(oldFileURL.lastPathComponent)")
                             } else {
                                 try fileManager.moveItem(at: oldFileURL, to: newFileURL)
-                                print("  ✅ [Migration] Migrated: \(oldFileURL.lastPathComponent) → \(newFileURL.lastPathComponent)")
                             }
                         }
                     }
@@ -288,9 +257,7 @@ class TodoStorageService {
             }
 
             UserDefaults.standard.set(true, forKey: migrationKey)
-            print("✅ [Migration] Todo file migration completed\n")
         } catch {
-            print("❌ [Migration] Migration failed: \(error)\n")
         }
     }
 }

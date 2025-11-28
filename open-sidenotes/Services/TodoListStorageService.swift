@@ -20,29 +20,19 @@ class TodoListStorageService {
     }
 
     func loadAllLists() async throws -> [TodoList] {
-        print("\n📂 [TodoListStorage] Starting loadAllLists")
-        print("📂 [TodoListStorage] Lists directory: \(listsDirectory.path)")
-
         let fileURLs = try fileManager.contentsOfDirectory(
             at: listsDirectory,
             includingPropertiesForKeys: nil,
             options: []
         ).filter { $0.pathExtension == "json" }
 
-        print("📂 [TodoListStorage] Found \(fileURLs.count) .json files")
-        for url in fileURLs {
-            print("  - \(url.lastPathComponent)")
-        }
-
         return try await withThrowingTaskGroup(of: TodoList?.self) { group in
             for fileURL in fileURLs {
                 group.addTask {
                     do {
                         let list = try await self.loadList(from: fileURL)
-                        print("  ✅ [TodoListStorage] Loaded list: \(list.name) (id: \(list.id))")
                         return list
                     } catch {
-                        print("  ❌ [TodoListStorage] Failed to load \(fileURL.lastPathComponent): \(error)")
                         return nil
                     }
                 }
@@ -54,7 +44,6 @@ class TodoListStorageService {
                     lists.append(list)
                 }
             }
-            print("📂 [TodoListStorage] Successfully loaded \(lists.count) lists\n")
             return lists.sorted { $0.createdAt < $1.createdAt }
         }
     }

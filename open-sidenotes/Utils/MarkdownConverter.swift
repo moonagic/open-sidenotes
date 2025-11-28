@@ -11,7 +11,6 @@ struct MarkdownConverter {
                 )
                 return NSAttributedString(attributedString)
             } catch {
-                print("Markdown parsing error: \(error)")
                 return NSAttributedString(string: markdown, attributes: defaultAttributes())
             }
         } else {

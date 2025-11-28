@@ -63,16 +63,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func showSettings() {
-        print("🔧 showSettings called")
         DispatchQueue.main.async { [weak self] in
             guard let self = self else {
-                print("❌ self is nil")
                 return
             }
 
-            print("✅ Creating/showing settings window")
             if self.settingsWindowController == nil {
-                print("🆕 Creating new SettingsWindowController")
                 self.settingsWindowController = SettingsWindowController { [weak self] in
                     guard let self = self else { return }
                     DispatchQueue.main.async {
@@ -82,14 +78,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
             }
-            print("📱 Calling show on window controller")
             self.settingsWindowController?.show()
-            print("✅ Show called, window should be visible: \(self.settingsWindowController?.window?.isVisible ?? false)")
         }
     }
 
     @objc private func handleOpenSettings() {
-        print("🔔 Notification received: openSettingsWindow")
         showSettings()
     }
 

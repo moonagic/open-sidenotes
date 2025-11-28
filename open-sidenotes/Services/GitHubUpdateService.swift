@@ -114,7 +114,6 @@ class GitHubUpdateService: ObservableObject {
 
         } catch {
             checkError = "Check update failed: \(error.localizedDescription)"
-            print("❌ Check update error: \(error)")
         }
     }
 
