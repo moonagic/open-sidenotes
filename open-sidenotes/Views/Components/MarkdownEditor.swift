@@ -80,6 +80,7 @@ struct MarkdownEditor: NSViewRepresentable {
         var shouldRenderImmediately = false
         var lastSearchQuery: String = ""
         var lastMatchIndex: Int = 0
+        var currentEditingLineRange: NSRange?
 
         init(_ parent: MarkdownEditor) {
             self.parent = parent
@@ -89,7 +90,9 @@ struct MarkdownEditor: NSViewRepresentable {
             guard let textView = notification.object as? NSTextView else { return }
 
             let markedRange = textView.markedRange()
-            if markedRange.location != NSNotFound && markedRange.length > 0 {
+            let isInMarkedTextMode = markedRange.location != NSNotFound && markedRange.length > 0
+
+            if isInMarkedTextMode {
                 return
             }
 
@@ -100,49 +103,38 @@ struct MarkdownEditor: NSViewRepresentable {
             parent.text = plainText
             isUpdating = false
 
-            let shouldRenderNow = shouldTriggerImmediateRender(oldText: lastText, newText: plainText)
-            lastText = plainText
+            let currentLineRange = getCurrentLineRange(in: textView, at: cursorPosition)
+            let lineChanged = currentEditingLineRange?.location != currentLineRange.location
 
-            renderTask?.cancel()
-
-            if shouldRenderNow {
+            if lineChanged && currentEditingLineRange != nil {
                 renderMarkdown(in: textView, text: plainText, cursorPosition: cursorPosition)
-            } else {
-                let task = DispatchWorkItem { [weak self, weak textView] in
-                    guard let self = self, let textView = textView else { return }
-
-                    DispatchQueue.main.async {
-                        let currentText = textView.string
-                        let currentCursor = textView.selectedRange().location
-                        self.renderMarkdown(in: textView, text: currentText, cursorPosition: currentCursor)
-                    }
-                }
-
-                renderTask = task
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: task)
             }
+
+            currentEditingLineRange = currentLineRange
+            lastText = plainText
         }
 
         func textDidEndEditing(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
+            currentEditingLineRange = nil
             renderTask?.cancel()
             renderMarkdown(in: textView, text: textView.string)
         }
 
-        private func shouldTriggerImmediateRender(oldText: String, newText: String) -> Bool {
-            guard newText.count > oldText.count else { return false }
-
-            let diff = newText.dropFirst(oldText.count)
-
-            return diff.contains("\n") || diff.contains(" ") || diff.hasSuffix("  ")
+        private func getCurrentLineRange(in textView: NSTextView, at position: Int) -> NSRange {
+            let text = textView.string as NSString
+            return text.lineRange(for: NSRange(location: position, length: 0))
         }
 
         func renderMarkdown(in textView: NSTextView, text: String, cursorPosition: Int? = nil) {
             guard let scrollView = textView.enclosingScrollView else { return }
 
-            let visibleRect = scrollView.documentVisibleRect
-            let attributedString = MarkdownRenderer.shared.render(text)
+            let savedScrollPosition = scrollView.contentView.bounds.origin
 
+            NSAnimationContext.beginGrouping()
+            NSAnimationContext.current.duration = 0
+
+            let attributedString = MarkdownRenderer.shared.render(text)
             textView.textStorage?.setAttributedString(attributedString)
 
             if let position = cursorPosition {
@@ -150,7 +142,10 @@ struct MarkdownEditor: NSViewRepresentable {
                 textView.setSelectedRange(NSRange(location: safePosition, length: 0))
             }
 
-            scrollView.documentView?.scroll(visibleRect.origin)
+            scrollView.contentView.setBoundsOrigin(savedScrollPosition)
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+
+            NSAnimationContext.endGrouping()
 
             applySearchHighlight(in: textView, query: lastSearchQuery, currentIndex: lastMatchIndex)
         }
