@@ -15,6 +15,10 @@ struct NoteEditorView: View {
     @State private var showReplace = false
     @State private var matches: [Range<String.Index>] = []
     @State private var currentMatchIndex = 0
+    @State private var showSlashMenu = false
+    @State private var slashMenuPosition: CGPoint = .zero
+    @State private var slashMenuQuery = ""
+    @State private var slashMenuSelectedIndex = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -90,15 +94,34 @@ struct NoteEditorView: View {
                         .background(Color(hex: "E8E8E8"))
                         .padding(.horizontal, 32)
 
-                    MarkdownEditor(
-                        text: $content,
-                        searchQuery: showFindBar ? findText : "",
-                        currentMatchIndex: currentMatchIndex
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.horizontal, 32)
-                    .padding(.top, 24)
-                    .padding(.bottom, 24)
+                    ZStack(alignment: .topLeading) {
+                        MarkdownEditor(
+                            text: $content,
+                            searchQuery: showFindBar ? findText : "",
+                            currentMatchIndex: currentMatchIndex,
+                            showSlashMenu: $showSlashMenu,
+                            slashMenuPosition: $slashMenuPosition,
+                            slashMenuQuery: $slashMenuQuery,
+                            slashMenuSelectedIndex: $slashMenuSelectedIndex
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.horizontal, 32)
+                        .padding(.top, 24)
+                        .padding(.bottom, 24)
+
+                        if showSlashMenu {
+                            SlashCommandMenu(
+                                commands: SlashCommand.filter(by: slashMenuQuery),
+                                selectedIndex: slashMenuSelectedIndex,
+                                onSelect: { command in
+                                    insertCommand(command)
+                                }
+                            )
+                            .padding(.leading, 48)
+                            .padding(.top, 72)
+                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                        }
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
@@ -194,6 +217,10 @@ struct NoteEditorView: View {
         guard !findText.isEmpty else { return }
         content = content.replacingOccurrences(of: findText, with: replaceText, options: .caseInsensitive)
         updateMatches()
+    }
+
+    private func insertCommand(_ command: SlashCommand) {
+        showSlashMenu = false
     }
 }
 

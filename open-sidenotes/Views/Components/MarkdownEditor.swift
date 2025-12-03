@@ -5,6 +5,26 @@ struct MarkdownEditor: NSViewRepresentable {
     @Binding var text: String
     var searchQuery: String = ""
     var currentMatchIndex: Int = 0
+    @Binding var showSlashMenu: Bool
+    @Binding var slashMenuPosition: CGPoint
+    @Binding var slashMenuQuery: String
+    @Binding var slashMenuSelectedIndex: Int
+
+    init(text: Binding<String>,
+         searchQuery: String = "",
+         currentMatchIndex: Int = 0,
+         showSlashMenu: Binding<Bool> = .constant(false),
+         slashMenuPosition: Binding<CGPoint> = .constant(.zero),
+         slashMenuQuery: Binding<String> = .constant(""),
+         slashMenuSelectedIndex: Binding<Int> = .constant(0)) {
+        self._text = text
+        self.searchQuery = searchQuery
+        self.currentMatchIndex = currentMatchIndex
+        self._showSlashMenu = showSlashMenu
+        self._slashMenuPosition = slashMenuPosition
+        self._slashMenuQuery = slashMenuQuery
+        self._slashMenuSelectedIndex = slashMenuSelectedIndex
+    }
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSTextView.scrollableTextView()
@@ -81,9 +101,41 @@ struct MarkdownEditor: NSViewRepresentable {
         var lastSearchQuery: String = ""
         var lastMatchIndex: Int = 0
         var currentEditingLineRange: NSRange?
+        var slashCommandRange: NSRange?
 
         init(_ parent: MarkdownEditor) {
             self.parent = parent
+        }
+
+        func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            if parent.showSlashMenu {
+                switch commandSelector {
+                case #selector(NSResponder.moveDown(_:)):
+                    let filteredCommands = SlashCommand.filter(by: parent.slashMenuQuery)
+                    if !filteredCommands.isEmpty {
+                        parent.slashMenuSelectedIndex = (parent.slashMenuSelectedIndex + 1) % filteredCommands.count
+                    }
+                    return true
+                case #selector(NSResponder.moveUp(_:)):
+                    let filteredCommands = SlashCommand.filter(by: parent.slashMenuQuery)
+                    if !filteredCommands.isEmpty {
+                        parent.slashMenuSelectedIndex = (parent.slashMenuSelectedIndex - 1 + filteredCommands.count) % filteredCommands.count
+                    }
+                    return true
+                case #selector(NSResponder.insertNewline(_:)):
+                    let filteredCommands = SlashCommand.filter(by: parent.slashMenuQuery)
+                    if parent.slashMenuSelectedIndex < filteredCommands.count {
+                        insertSlashCommand(in: textView, command: filteredCommands[parent.slashMenuSelectedIndex])
+                    }
+                    return true
+                case #selector(NSResponder.cancelOperation(_:)):
+                    closeSlashMenu()
+                    return true
+                default:
+                    break
+                }
+            }
+            return false
         }
 
         func textDidChange(_ notification: Notification) {
@@ -102,6 +154,8 @@ struct MarkdownEditor: NSViewRepresentable {
             isUpdating = true
             parent.text = plainText
             isUpdating = false
+
+            checkSlashCommand(in: textView, at: cursorPosition)
 
             let currentLineRange = getCurrentLineRange(in: textView, at: cursorPosition)
             let lineChanged = currentEditingLineRange?.location != currentLineRange.location
@@ -184,6 +238,80 @@ struct MarkdownEditor: NSViewRepresentable {
                 matchIndex += 1
                 searchStart = range.upperBound
             }
+        }
+
+        func checkSlashCommand(in textView: NSTextView, at position: Int) {
+            let text = textView.string as NSString
+            let lineRange = text.lineRange(for: NSRange(location: position, length: 0))
+            let lineText = text.substring(with: lineRange).trimmingCharacters(in: .newlines)
+
+            let trimmedLine = lineText.trimmingCharacters(in: .whitespaces)
+
+            let slashPattern = "^\\s*/[a-z0-9]*$"
+            if let regex = try? NSRegularExpression(pattern: slashPattern, options: []),
+               regex.firstMatch(in: lineText, range: NSRange(location: 0, length: lineText.count)) != nil {
+
+                if let slashRange = lineText.range(of: "/") {
+                    let slashIndex = lineText.distance(from: lineText.startIndex, to: slashRange.lowerBound)
+                    let absoluteSlashPos = lineRange.location + slashIndex
+                    slashCommandRange = NSRange(location: absoluteSlashPos, length: position - absoluteSlashPos)
+
+                    let query = String(lineText[slashRange.lowerBound...].prefix(position - absoluteSlashPos))
+                    parent.slashMenuQuery = query
+
+                    let filteredCommands = SlashCommand.filter(by: query)
+                    if filteredCommands.isEmpty {
+                        closeSlashMenu()
+                        return
+                    }
+                    parent.slashMenuSelectedIndex = min(parent.slashMenuSelectedIndex, max(0, filteredCommands.count - 1))
+
+                    if let layoutManager = textView.layoutManager,
+                       let textContainer = textView.textContainer {
+                        let glyphRange = layoutManager.glyphRange(forCharacterRange: NSRange(location: position, length: 0), actualCharacterRange: nil)
+                        let rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+
+                        if let window = textView.window {
+                            let textViewPoint = CGPoint(x: rect.minX, y: rect.maxY + 4)
+                            let windowPoint = textView.convert(textViewPoint, to: nil)
+                            let screenPoint = window.convertPoint(toScreen: windowPoint)
+                            parent.slashMenuPosition = screenPoint
+                        }
+                    }
+
+                    parent.showSlashMenu = true
+                } else {
+                    closeSlashMenu()
+                }
+            } else {
+                closeSlashMenu()
+            }
+        }
+
+        func insertSlashCommand(in textView: NSTextView, command: SlashCommand) {
+            guard let range = slashCommandRange else { return }
+
+            let cursorOffset = command.template.contains("text") || command.template.contains("url") ?
+                command.template.distance(from: command.template.startIndex,
+                                         to: command.template.range(of: "text")?.lowerBound ?? command.template.endIndex) :
+                command.template.count
+
+            if textView.shouldChangeText(in: range, replacementString: command.template) {
+                textView.textStorage?.replaceCharacters(in: range, with: command.template)
+                textView.didChangeText()
+
+                let newPosition = range.location + cursorOffset
+                textView.setSelectedRange(NSRange(location: newPosition, length: 0))
+            }
+
+            closeSlashMenu()
+        }
+
+        func closeSlashMenu() {
+            parent.showSlashMenu = false
+            parent.slashMenuQuery = ""
+            parent.slashMenuSelectedIndex = 0
+            slashCommandRange = nil
         }
     }
 }
