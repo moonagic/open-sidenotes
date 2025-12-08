@@ -1,7 +1,13 @@
 import AppKit
+import Highlighter
 
 class MarkdownRenderer {
     static let shared = MarkdownRenderer()
+    private let highlighter: Highlighter?
+
+    init() {
+        self.highlighter = Highlighter()
+    }
 
     private let baseFont = NSFont.systemFont(ofSize: 15, weight: .regular)
     private let baseColor = NSColor(red: 0.17, green: 0.17, blue: 0.17, alpha: 1.0)
@@ -28,6 +34,7 @@ class MarkdownRenderer {
             ]
         )
 
+        applyCodeBlocks(to: attributed)
         applyHeadings(to: attributed)
         applyTaskLists(to: attributed)
         applyQuotes(to: attributed)
@@ -229,6 +236,118 @@ class MarkdownRenderer {
 
             let linkAttributedString = NSAttributedString(string: linkText, attributes: linkAttributes)
             attributed.replaceCharacters(in: fullRange, with: linkAttributedString)
+        }
+    }
+
+    private func applyCodeBlocks(to attributed: NSMutableAttributedString) {
+        let pattern = "```([a-z0-9]*)\\n([\\s\\S]*?)\\n```"
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return }
+
+        let matches = regex.matches(in: attributed.string, range: NSRange(location: 0, length: attributed.length))
+
+        for match in matches.reversed() {
+            let fullRange = match.range
+            let languageRange = match.range(at: 1)
+            let codeRange = match.range(at: 2)
+
+            let language = (attributed.string as NSString).substring(with: languageRange)
+            let code = (attributed.string as NSString).substring(with: codeRange)
+
+            let codeLines = code.components(separatedBy: "\n")
+
+            let codeBlockAttr = NSMutableAttributedString()
+
+            let openingMark = NSAttributedString(
+                string: "```\(language)\n",
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 11, weight: .regular),
+                    .foregroundColor: markColor
+                ]
+            )
+            codeBlockAttr.append(openingMark)
+
+            let codeFont = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
+            let lineNumberFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+            let lineNumberColor = NSColor(red: 0.6, green: 0.6, blue: 0.6, alpha: 1.0)
+
+            var highlightedCode: NSAttributedString?
+            if !language.isEmpty, let highlighter = highlighter {
+                highlightedCode = highlighter.highlight(code, as: language)
+            }
+
+            for (index, line) in codeLines.enumerated() {
+                let lineNumber = "\(index + 1)  "
+                let lineNumberAttr = NSAttributedString(
+                    string: lineNumber,
+                    attributes: [
+                        .font: lineNumberFont,
+                        .foregroundColor: lineNumberColor,
+                        .backgroundColor: NSColor(red: 0.92, green: 0.92, blue: 0.92, alpha: 1.0)
+                    ]
+                )
+                codeBlockAttr.append(lineNumberAttr)
+
+                if let highlighted = highlightedCode {
+                    let lineStart = code.components(separatedBy: "\n").prefix(index).joined(separator: "\n").count + (index > 0 ? 1 : 0)
+                    let lineLength = line.count
+
+                    if lineStart + lineLength <= highlighted.length {
+                        let lineRange = NSRange(location: lineStart, length: lineLength)
+                        let highlightedLine = highlighted.attributedSubstring(from: lineRange)
+
+                        let styledLine = NSMutableAttributedString(attributedString: highlightedLine)
+                        styledLine.addAttribute(.backgroundColor, value: NSColor(red: 0.96, green: 0.96, blue: 0.96, alpha: 1.0), range: NSRange(location: 0, length: styledLine.length))
+                        codeBlockAttr.append(styledLine)
+                    } else {
+                        let plainLine = NSAttributedString(
+                            string: line,
+                            attributes: [
+                                .font: codeFont,
+                                .foregroundColor: baseColor,
+                                .backgroundColor: NSColor(red: 0.96, green: 0.96, blue: 0.96, alpha: 1.0)
+                            ]
+                        )
+                        codeBlockAttr.append(plainLine)
+                    }
+                } else {
+                    let plainLine = NSAttributedString(
+                        string: line,
+                        attributes: [
+                            .font: codeFont,
+                            .foregroundColor: baseColor,
+                            .backgroundColor: NSColor(red: 0.96, green: 0.96, blue: 0.96, alpha: 1.0)
+                        ]
+                    )
+                    codeBlockAttr.append(plainLine)
+                }
+
+                if index < codeLines.count - 1 {
+                    codeBlockAttr.append(NSAttributedString(string: "\n"))
+                }
+            }
+
+            let closingMark = NSAttributedString(
+                string: "\n```",
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 11, weight: .regular),
+                    .foregroundColor: markColor
+                ]
+            )
+            codeBlockAttr.append(closingMark)
+
+            if !language.isEmpty {
+                let languageLabel = NSAttributedString(
+                    string: " [\(language.uppercased())]",
+                    attributes: [
+                        .font: NSFont.systemFont(ofSize: 11, weight: .medium),
+                        .foregroundColor: NSColor(red: 0.486, green: 0.596, blue: 0.522, alpha: 1.0),
+                        .backgroundColor: NSColor(red: 0.486, green: 0.596, blue: 0.522, alpha: 0.15)
+                    ]
+                )
+                codeBlockAttr.append(languageLabel)
+            }
+
+            attributed.replaceCharacters(in: fullRange, with: codeBlockAttr)
         }
     }
 

@@ -142,24 +142,38 @@ struct ContentView: View {
     }
 
     private func handleNoteSelection(_ newNote: Note?) {
+        print("🔄 [ContentView] handleNoteSelection called")
+        print("🔄 [ContentView] New note ID: \(newNote?.id.uuidString ?? "nil")")
+        print("🔄 [ContentView] Current editing ID: \(editingNoteId?.uuidString ?? "nil")")
+
         if newNote?.id == editingNoteId {
+            print("⚠️ [ContentView] Same note, skipping")
             return
         }
 
         saveTask?.cancel()
 
         if let currentId = editingNoteId, let newId = newNote?.id, currentId != newId {
+            print("💾 [ContentView] Saving current note before switch")
             saveCurrentNote(id: currentId, title: editingTitle, content: editingContent)
         }
 
         if let note = newNote {
+            print("✅ [ContentView] Starting to edit new note")
             startEditing(note)
         } else {
+            print("⭕ [ContentView] Stopping editing")
             stopEditing()
         }
     }
 
     private func startEditing(_ note: Note) {
+        print("📝 [ContentView] startEditing called")
+        print("📝 [ContentView] Note ID: \(note.id.uuidString)")
+        print("📝 [ContentView] Note title: '\(note.title)'")
+        print("📝 [ContentView] Note content length: \(note.content.count)")
+        print("📝 [ContentView] Note content preview: '\(String(note.content.prefix(100)))'")
+
         isLoadingNote = true
         editingNoteId = note.id
         editingTitle = note.title
@@ -167,6 +181,7 @@ struct ContentView: View {
         LastOpenedNoteManager.shared.saveLastOpenedNote(note.id)
 
         DispatchQueue.main.async {
+            print("📝 [ContentView] isLoadingNote set to false")
             isLoadingNote = false
         }
     }

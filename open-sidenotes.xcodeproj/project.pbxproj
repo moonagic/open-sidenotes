@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		08F610112EE0144B00C601A2 /* Highlighter in Frameworks */ = {isa = PBXBuildFile; productRef = 08F610102EE0144B00C601A2 /* Highlighter */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		0803A5CE2D1ABDDC005CB5E8 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				08F610112EE0144B00C601A2 /* Highlighter in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -120,6 +125,7 @@
 			);
 			name = "open-sidenotes";
 			packageProductDependencies = (
+				08F610102EE0144B00C601A2 /* Highlighter */,
 			);
 			productName = "open-sidenotes";
 			productReference = 0803A5BC2D1ABDDB005CB5E8 /* open-sidenotes.app */;
@@ -204,6 +210,7 @@
 			mainGroup = 0803A5B32D1ABDDB005CB5E8;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				08F6100F2EE0135000C601A2 /* XCRemoteSwiftPackageReference "HighlighterSwift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0803A5BD2D1ABDDB005CB5E8 /* Products */;
@@ -551,6 +558,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		08F6100F2EE0135000C601A2 /* XCRemoteSwiftPackageReference "HighlighterSwift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/smittytone/HighlighterSwift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		08F610102EE0144B00C601A2 /* Highlighter */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 08F6100F2EE0135000C601A2 /* XCRemoteSwiftPackageReference "HighlighterSwift" */;
+			productName = Highlighter;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 0803A5B42D1ABDDB005CB5E8 /* Project object */;
 }

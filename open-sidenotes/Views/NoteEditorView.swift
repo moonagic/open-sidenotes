@@ -15,10 +15,6 @@ struct NoteEditorView: View {
     @State private var showReplace = false
     @State private var matches: [Range<String.Index>] = []
     @State private var currentMatchIndex = 0
-    @State private var showSlashMenu = false
-    @State private var slashMenuPosition: CGPoint = .zero
-    @State private var slashMenuQuery = ""
-    @State private var slashMenuSelectedIndex = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -94,34 +90,14 @@ struct NoteEditorView: View {
                         .background(Color(hex: "E8E8E8"))
                         .padding(.horizontal, 32)
 
-                    ZStack(alignment: .topLeading) {
-                        MarkdownEditor(
-                            text: $content,
-                            searchQuery: showFindBar ? findText : "",
-                            currentMatchIndex: currentMatchIndex,
-                            showSlashMenu: $showSlashMenu,
-                            slashMenuPosition: $slashMenuPosition,
-                            slashMenuQuery: $slashMenuQuery,
-                            slashMenuSelectedIndex: $slashMenuSelectedIndex
-                        )
+                    BlockEditor(content: $content)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .padding(.horizontal, 32)
-                        .padding(.top, 24)
-                        .padding(.bottom, 24)
-
-                        if showSlashMenu {
-                            SlashCommandMenu(
-                                commands: SlashCommand.filter(by: slashMenuQuery),
-                                selectedIndex: slashMenuSelectedIndex,
-                                onSelect: { command in
-                                    insertCommand(command)
-                                }
-                            )
-                            .padding(.leading, 48)
-                            .padding(.top, 72)
-                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                        .id(selectedNote?.id)
+                        .onAppear {
+                            print("🎯 [NoteEditorView] BlockEditor appeared")
+                            print("🎯 [NoteEditorView] Content: '\(String(content.prefix(100)))'")
+                            print("🎯 [NoteEditorView] SelectedNote ID: \(selectedNote?.id.uuidString ?? "nil")")
                         }
-                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
@@ -150,10 +126,17 @@ struct NoteEditorView: View {
         .onChange(of: findText) { _ in
             updateMatches()
         }
-        .onChange(of: content) { _ in
+        .onChange(of: content) { newValue in
+            print("📄 [NoteEditorView] content changed")
+            print("📄 [NoteEditorView] New content length: \(newValue.count)")
             if showFindBar {
                 updateMatches()
             }
+        }
+        .onChange(of: selectedNote) { newNote in
+            print("📌 [NoteEditorView] selectedNote changed")
+            print("📌 [NoteEditorView] New note ID: \(newNote?.id.uuidString ?? "nil")")
+            print("📌 [NoteEditorView] New note title: '\(newNote?.title ?? "nil")'")
         }
         .background(
             Button("") {
@@ -219,9 +202,6 @@ struct NoteEditorView: View {
         updateMatches()
     }
 
-    private func insertCommand(_ command: SlashCommand) {
-        showSlashMenu = false
-    }
 }
 
 #Preview {

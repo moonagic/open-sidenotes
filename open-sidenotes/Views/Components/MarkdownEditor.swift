@@ -9,6 +9,7 @@ struct MarkdownEditor: NSViewRepresentable {
     @Binding var slashMenuPosition: CGPoint
     @Binding var slashMenuQuery: String
     @Binding var slashMenuSelectedIndex: Int
+    @Binding var selectedLanguage: CodeLanguage?
 
     init(text: Binding<String>,
          searchQuery: String = "",
@@ -16,7 +17,8 @@ struct MarkdownEditor: NSViewRepresentable {
          showSlashMenu: Binding<Bool> = .constant(false),
          slashMenuPosition: Binding<CGPoint> = .constant(.zero),
          slashMenuQuery: Binding<String> = .constant(""),
-         slashMenuSelectedIndex: Binding<Int> = .constant(0)) {
+         slashMenuSelectedIndex: Binding<Int> = .constant(0),
+         selectedLanguage: Binding<CodeLanguage?> = .constant(nil)) {
         self._text = text
         self.searchQuery = searchQuery
         self.currentMatchIndex = currentMatchIndex
@@ -24,6 +26,7 @@ struct MarkdownEditor: NSViewRepresentable {
         self._slashMenuPosition = slashMenuPosition
         self._slashMenuQuery = slashMenuQuery
         self._slashMenuSelectedIndex = slashMenuSelectedIndex
+        self._selectedLanguage = selectedLanguage
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -86,6 +89,14 @@ struct MarkdownEditor: NSViewRepresentable {
             context.coordinator.lastMatchIndex = currentMatchIndex
             context.coordinator.applySearchHighlight(in: textView, query: searchQuery, currentIndex: currentMatchIndex)
         }
+
+        if let language = selectedLanguage, context.coordinator.lastSelectedLanguage != language {
+            context.coordinator.lastSelectedLanguage = language
+            context.coordinator.insertCodeBlock(in: textView, language: language)
+            DispatchQueue.main.async {
+                self.selectedLanguage = nil
+            }
+        }
     }
 
     func makeCoordinator() -> Coordinator {
@@ -102,6 +113,7 @@ struct MarkdownEditor: NSViewRepresentable {
         var lastMatchIndex: Int = 0
         var currentEditingLineRange: NSRange?
         var slashCommandRange: NSRange?
+        var lastSelectedLanguage: CodeLanguage?
 
         init(_ parent: MarkdownEditor) {
             self.parent = parent
@@ -245,8 +257,6 @@ struct MarkdownEditor: NSViewRepresentable {
             let lineRange = text.lineRange(for: NSRange(location: position, length: 0))
             let lineText = text.substring(with: lineRange).trimmingCharacters(in: .newlines)
 
-            let trimmedLine = lineText.trimmingCharacters(in: .whitespaces)
-
             let slashPattern = "^\\s*/[a-z0-9]*$"
             if let regex = try? NSRegularExpression(pattern: slashPattern, options: []),
                regex.firstMatch(in: lineText, range: NSRange(location: 0, length: lineText.count)) != nil {
@@ -291,6 +301,11 @@ struct MarkdownEditor: NSViewRepresentable {
         func insertSlashCommand(in textView: NSTextView, command: SlashCommand) {
             guard let range = slashCommandRange else { return }
 
+            if command.needsLanguageSelector {
+                closeSlashMenu()
+                return
+            }
+
             let cursorOffset = command.template.contains("text") || command.template.contains("url") ?
                 command.template.distance(from: command.template.startIndex,
                                          to: command.template.range(of: "text")?.lowerBound ?? command.template.endIndex) :
@@ -307,11 +322,78 @@ struct MarkdownEditor: NSViewRepresentable {
             closeSlashMenu()
         }
 
+        func insertCodeBlock(in textView: NSTextView, language: CodeLanguage) {
+            guard let range = slashCommandRange else { return }
+
+            let languageId = language.highlightIdentifier
+            let template = languageId.isEmpty ? "```\n\n```" : "```\(languageId)\n\n```"
+            let cursorOffset = languageId.isEmpty ? 4 : languageId.count + 5
+
+            if textView.shouldChangeText(in: range, replacementString: template) {
+                textView.textStorage?.replaceCharacters(in: range, with: template)
+                textView.didChangeText()
+
+                let newPosition = range.location + cursorOffset
+                textView.setSelectedRange(NSRange(location: newPosition, length: 0))
+            }
+
+            slashCommandRange = nil
+        }
+
         func closeSlashMenu() {
             parent.showSlashMenu = false
             parent.slashMenuQuery = ""
             parent.slashMenuSelectedIndex = 0
             slashCommandRange = nil
+        }
+
+        func textView(_ view: NSTextView, menu: NSMenu, for event: NSEvent, at charIndex: Int) -> NSMenu? {
+            if let codeBlockRange = findCodeBlockRange(in: view, at: charIndex) {
+                let copyItem = NSMenuItem(
+                    title: "复制代码",
+                    action: #selector(copyCodeBlock(_:)),
+                    keyEquivalent: ""
+                )
+                copyItem.target = self
+                copyItem.representedObject = codeBlockRange
+                menu.insertItem(copyItem, at: 0)
+                menu.insertItem(NSMenuItem.separator(), at: 1)
+            }
+            return menu
+        }
+
+        @objc func copyCodeBlock(_ sender: NSMenuItem) {
+            guard let range = sender.representedObject as? NSRange,
+                  let textView = NSApp.keyWindow?.firstResponder as? NSTextView else { return }
+
+            let text = (textView.string as NSString).substring(with: range)
+            let pattern = "```[a-z0-9]*\\n([\\s\\S]*?)\\n```"
+
+            if let regex = try? NSRegularExpression(pattern: pattern, options: []),
+               let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: text.count)) {
+                let codeRange = match.range(at: 1)
+                let code = (text as NSString).substring(with: codeRange)
+
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                pasteboard.setString(code, forType: .string)
+            }
+        }
+
+        private func findCodeBlockRange(in textView: NSTextView, at charIndex: Int) -> NSRange? {
+            let text = textView.string as NSString
+            let pattern = "```[a-z0-9]*\\n[\\s\\S]*?\\n```"
+
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
+            let matches = regex.matches(in: textView.string, range: NSRange(location: 0, length: text.length))
+
+            for match in matches {
+                let range = match.range
+                if charIndex >= range.location && charIndex <= range.location + range.length {
+                    return range
+                }
+            }
+            return nil
         }
     }
 }
