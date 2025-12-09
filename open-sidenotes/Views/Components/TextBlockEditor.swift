@@ -26,8 +26,10 @@ class SelfSizingTextView: NSView {
 
     override var intrinsicContentSize: NSSize {
         textView.layoutManager?.ensureLayout(for: textView.textContainer!)
-        let contentSize = textView.layoutManager?.usedRect(for: textView.textContainer!).size ?? .zero
-        let height = max(contentSize.height, 40)
+        let usedRect = textView.layoutManager?.usedRect(for: textView.textContainer!) ?? .zero
+        let contentHeight = usedRect.size.height + usedRect.origin.y
+        let height = max(contentHeight + 20, 40)
+
         return NSSize(width: NSView.noIntrinsicMetric, height: height)
     }
 }
@@ -185,26 +187,24 @@ struct TextBlockEditor: NSViewRepresentable {
             let plainText = textView.string
             let cursorPosition = textView.selectedRange().location
 
-            print("📝 [TextBlockEditor] textDidChange: '\(plainText)'")
-            print("📍 [TextBlockEditor] Cursor position: \(cursorPosition)")
-
             isUpdating = true
             parent.onTextChange(plainText)
             isUpdating = false
 
             checkSlashCommand(in: textView, at: cursorPosition)
+
+            DispatchQueue.main.async {
+                self.containerView?.invalidateIntrinsicContentSize()
+            }
         }
 
         func renderMarkdown(in textView: NSTextView, text: String) {
-            print("🎨 [TextBlockEditor] renderMarkdown called")
-            print("🎨 [TextBlockEditor] Input text length: \(text.count)")
             let attributedString = MarkdownRenderer.shared.render(text)
-            print("🎨 [TextBlockEditor] Rendered attributedString length: \(attributedString.length)")
             textView.textStorage?.setAttributedString(attributedString)
-            print("🎨 [TextBlockEditor] TextView string length after render: \(textView.string.count)")
 
-            containerView?.invalidateIntrinsicContentSize()
-            containerView?.superview?.needsLayout = true
+            DispatchQueue.main.async {
+                self.containerView?.invalidateIntrinsicContentSize()
+            }
         }
 
         func checkSlashCommand(in textView: NSTextView, at position: Int) {
@@ -268,7 +268,9 @@ struct TextBlockEditor: NSViewRepresentable {
                 parent.showSlashMenu = false
                 parent.slashMenuQuery = ""
                 parent.slashMenuSelectedIndex = 0
-                parent.showLanguageSelector = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    self.parent.showLanguageSelector = true
+                }
                 return
             }
 

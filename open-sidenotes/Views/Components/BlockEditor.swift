@@ -226,10 +226,5 @@ struct BlockEditor: View {
         }
         selectedLanguage = language
         print("🟢 [BlockEditor] Set selectedLanguage to \(language.displayName)")
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            print("🟢 [BlockEditor] Delayed parseContent execution")
-            self.parseContent()
-        }
     }
 }

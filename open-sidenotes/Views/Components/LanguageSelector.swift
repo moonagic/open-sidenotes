@@ -3,6 +3,8 @@ import SwiftUI
 struct LanguageSelector: View {
     let onSelect: (CodeLanguage) -> Void
     @State private var selectedIndex: Int = 0
+    @State private var eventMonitor: Any?
+    @State private var isReady: Bool = false
 
     private let languages: [CodeLanguage] = [
         .swift, .python,
@@ -39,13 +41,29 @@ struct LanguageSelector: View {
         .cornerRadius(8)
         .shadow(color: Color.black.opacity(0.12), radius: 12, x: 0, y: 4)
         .onAppear {
-            NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                handleKeyEvent(event)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self.isReady = true
+                self.eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                    self.handleKeyEvent(event)
+                }
+                print("🎹 [LanguageSelector] Keyboard monitor added")
+            }
+        }
+        .onDisappear {
+            if let monitor = eventMonitor {
+                NSEvent.removeMonitor(monitor)
+                eventMonitor = nil
+                print("🎹 [LanguageSelector] Keyboard monitor removed")
             }
         }
     }
 
     private func handleKeyEvent(_ event: NSEvent) -> NSEvent? {
+        guard isReady else {
+            print("🎹 [LanguageSelector] Not ready yet, ignoring key event")
+            return event
+        }
+
         switch event.keyCode {
         case 123:
             selectedIndex = max(0, selectedIndex - 1)
@@ -60,6 +78,7 @@ struct LanguageSelector: View {
             selectedIndex = max(0, selectedIndex - 2)
             return nil
         case 36:
+            print("🎹 [LanguageSelector] Enter pressed, selecting: \(languages[selectedIndex].displayName)")
             onSelect(languages[selectedIndex])
             return nil
         case 53:
