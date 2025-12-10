@@ -169,14 +169,7 @@ struct MarkdownEditor: NSViewRepresentable {
 
             checkSlashCommand(in: textView, at: cursorPosition)
 
-            let currentLineRange = getCurrentLineRange(in: textView, at: cursorPosition)
-            let lineChanged = currentEditingLineRange?.location != currentLineRange.location
-
-            if lineChanged && currentEditingLineRange != nil {
-                renderMarkdown(in: textView, text: plainText, cursorPosition: cursorPosition)
-            }
-
-            currentEditingLineRange = currentLineRange
+            currentEditingLineRange = getCurrentLineRange(in: textView, at: cursorPosition)
             lastText = plainText
         }
 
@@ -193,25 +186,32 @@ struct MarkdownEditor: NSViewRepresentable {
         }
 
         func renderMarkdown(in textView: NSTextView, text: String, cursorPosition: Int? = nil) {
-            guard let scrollView = textView.enclosingScrollView else { return }
+            guard let textStorage = textView.textStorage,
+                  let layoutManager = textView.layoutManager,
+                  let scrollView = textView.enclosingScrollView else { return }
 
             let savedScrollPosition = scrollView.contentView.bounds.origin
+            let savedSelection = textView.selectedRange()
 
-            NSAnimationContext.beginGrouping()
-            NSAnimationContext.current.duration = 0
+            layoutManager.allowsNonContiguousLayout = false
+
+            textStorage.beginEditing()
 
             let attributedString = MarkdownRenderer.shared.render(text)
-            textView.textStorage?.setAttributedString(attributedString)
+            textStorage.setAttributedString(attributedString)
+
+            textStorage.endEditing()
 
             if let position = cursorPosition {
                 let safePosition = min(position, textView.string.count)
                 textView.setSelectedRange(NSRange(location: safePosition, length: 0))
+            } else {
+                textView.setSelectedRange(savedSelection)
             }
 
+            layoutManager.ensureLayout(for: textView.textContainer!)
+            scrollView.contentView.scrollToVisible(scrollView.contentView.bounds)
             scrollView.contentView.setBoundsOrigin(savedScrollPosition)
-            scrollView.reflectScrolledClipView(scrollView.contentView)
-
-            NSAnimationContext.endGrouping()
 
             applySearchHighlight(in: textView, query: lastSearchQuery, currentIndex: lastMatchIndex)
         }
