@@ -86,3 +86,7 @@ DerivedData/
 .DS_Store
 
 iOSInjectionProject/
+
+.claude/
+.specify/
+.workflow-confirmations.json
