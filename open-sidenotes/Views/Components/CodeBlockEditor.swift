@@ -16,6 +16,17 @@ struct CodeBlockEditor: NSViewRepresentable {
         containerView.layer?.borderWidth = 1
         containerView.layer?.borderColor = NSColor(red: 0.88, green: 0.88, blue: 0.88, alpha: 1.0).cgColor
 
+        let copyButton = NSButton()
+        copyButton.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "Copy")
+        copyButton.bezelStyle = .regularSquare
+        copyButton.isBordered = false
+        copyButton.imagePosition = .imageOnly
+        copyButton.contentTintColor = NSColor(red: 0.486, green: 0.596, blue: 0.522, alpha: 1.0)
+        copyButton.target = context.coordinator
+        copyButton.action = #selector(Coordinator.copyCode)
+        copyButton.translatesAutoresizingMaskIntoConstraints = false
+        containerView.addSubview(copyButton)
+
         let languageLabel = NSTextField(labelWithString: language.displayName.uppercased())
         languageLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
         languageLabel.textColor = NSColor(red: 0.486, green: 0.596, blue: 0.522, alpha: 1.0)
@@ -64,6 +75,11 @@ struct CodeBlockEditor: NSViewRepresentable {
         maxHeightConstraint.priority = .defaultHigh
 
         NSLayoutConstraint.activate([
+            copyButton.centerYAnchor.constraint(equalTo: languageLabel.centerYAnchor),
+            copyButton.trailingAnchor.constraint(equalTo: languageLabel.leadingAnchor, constant: -8),
+            copyButton.widthAnchor.constraint(equalToConstant: 20),
+            copyButton.heightAnchor.constraint(equalToConstant: 20),
+
             languageLabel.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 8),
             languageLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -12),
             languageLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 50),
@@ -78,6 +94,7 @@ struct CodeBlockEditor: NSViewRepresentable {
         ])
 
         context.coordinator.textView = textView
+        context.coordinator.copyButton = copyButton
         context.coordinator.scheduleHighlight()
 
         return containerView
@@ -94,13 +111,34 @@ struct CodeBlockEditor: NSViewRepresentable {
     class Coordinator: NSObject, NSTextViewDelegate {
         var parent: CodeBlockEditor
         weak var textView: NSTextView?
+        weak var copyButton: NSButton?
         private let highlighter: Highlighter?
         private var highlightWorkItem: DispatchWorkItem?
         private var isHighlighting = false
+        private var copyFeedbackWorkItem: DispatchWorkItem?
 
         init(_ parent: CodeBlockEditor) {
             self.parent = parent
             self.highlighter = Highlighter()
+        }
+
+        @objc func copyCode() {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(parent.code, forType: .string)
+            showCopyFeedback()
+        }
+
+        func showCopyFeedback() {
+            copyFeedbackWorkItem?.cancel()
+
+            copyButton?.image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "Copied")
+
+            let workItem = DispatchWorkItem { [weak self] in
+                self?.copyButton?.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "Copy")
+            }
+
+            copyFeedbackWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: workItem)
         }
 
         func textDidChange(_ notification: Notification) {
