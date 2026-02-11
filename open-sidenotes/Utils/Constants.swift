@@ -56,15 +56,9 @@ Your thoughts, beautifully organized with real-time Markdown rendering.
 """
 
     static let defaultNotesDirectoryName = "OpenSidenotes"
-    static let defaultTodosDirectoryName = "Todos"
 
     static func defaultNotesDirectory() -> URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(defaultNotesDirectoryName, isDirectory: true)
-    }
-
-    static func defaultTodosDirectory() -> URL {
-        defaultNotesDirectory()
-            .appendingPathComponent(defaultTodosDirectoryName, isDirectory: true)
     }
 }

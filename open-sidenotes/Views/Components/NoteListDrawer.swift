@@ -2,14 +2,8 @@ import SwiftUI
 
 struct NoteListDrawer: View {
     @ObservedObject var noteStore: NoteStore
-    @ObservedObject var todoStore: TodoStore
-    @ObservedObject var listStore: TodoListStore
-    @Binding var activeTab: String
     @Binding var selectedNote: Note?
-    @Binding var selectedList: TodoList?
     var onNewNote: () -> Void
-    var onNewTodo: () -> Void
-    var onToggleTodoCompletion: (Todo) -> Void
     var onClose: () -> Void
     var onOpenSettings: () -> Void
 
@@ -22,297 +16,342 @@ struct NoteListDrawer: View {
     private var filteredNotes: [Note] {
         guard !debouncedSearch.isEmpty else { return noteStore.notes }
         let query = debouncedSearch.lowercased()
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
 
         return noteStore.notes.filter { note in
             note.title.lowercased().contains(query) ||
-            note.content.lowercased().contains(query) ||
-            dateFormatter.string(from: note.updatedAt).contains(query) ||
-            dateFormatter.string(from: note.createdAt).contains(query)
+            note.content.lowercased().contains(query)
         }
     }
 
     var body: some View {
         ZStack(alignment: .leading) {
-            // Background overlay - tap to close
-            Color.black.opacity(0.2)
+            Color.black.opacity(0.24)
                 .ignoresSafeArea()
                 .onTapGesture {
                     onClose()
                 }
 
-            // Drawer content
-            VStack(alignment: .leading, spacing: 0) {
-                TabSwitchView(
-                    activeTab: $activeTab,
-                    tabs: [
-                        (id: "notes", label: "NOTES"),
-                        (id: "tasks", label: "TASKS")
-                    ]
-                )
-
-                // Header
+            HStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 0) {
-                    HStack(alignment: .center) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(activeTab == "notes" ? "NOTES" : "TASKS")
-                                .font(.system(size: 13, weight: .medium))
-                                .tracking(0.5)
-                                .foregroundColor(Color(hex: "888888"))
-
-                            Rectangle()
-                                .fill(Color(hex: "E8E8E8"))
-                                .frame(width: activeTab == "notes" ? 45 : 42, height: 1)
-                        }
-
-                        Spacer()
-
-                        Button(action: {
-                            if activeTab == "notes" {
-                                onNewNote()
-                            } else {
-                                onNewTodo()
-                            }
-                            onClose()
-                        }) {
-                            Image(systemName: "plus")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(Color(hex: "7C9885"))
-                                .frame(width: 32, height: 32)
-                                .background(
-                                    Circle()
-                                        .fill(Color(hex: "7C9885").opacity(0.1))
-                                )
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 16)
+                    drawerHeader
+                    searchBar
+                    drawerBody
+                    drawerFooter
                 }
+                .frame(width: 332)
+                .frame(maxHeight: .infinity)
+                .background(
+                    RoundedRectangle(cornerRadius: 24)
+                        .fill(Color.white.opacity(0.95))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 24)
+                                .stroke(Color.white.opacity(0.75), lineWidth: 1)
+                        )
+                        .shadow(color: Color.black.opacity(0.12), radius: 26, x: 8, y: 0)
+                )
+                .padding(.leading, 12)
+                .padding(.vertical, 12)
 
-                // Content based on active tab
-                if activeTab == "notes" {
-                    // Search bar
-                    HStack(spacing: 8) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 13))
-                            .foregroundColor(Color(hex: "888888"))
-
-                        TextField("Search notes...", text: $searchText)
-                            .textFieldStyle(PlainTextFieldStyle())
-                            .font(.system(size: 13))
-                            .foregroundColor(Color(hex: "2C2C2C"))
-                            .focused($isSearchFocused)
-                            .onChange(of: searchText) { newValue in
-                                searchTask?.cancel()
-                                let task = DispatchWorkItem {
-                                    debouncedSearch = newValue
-                                }
-                                searchTask = task
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: task)
-                            }
-
-                        if !searchText.isEmpty {
-                            Button(action: {
-                                searchText = ""
-                                debouncedSearch = ""
-                            }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 13))
-                                    .foregroundColor(Color(hex: "888888"))
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(Color(hex: "F5F5F5"))
-                    .cornerRadius(8)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-
-                    // Notes list
-                    if noteStore.isLoading {
-                    Spacer()
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
-                    Spacer()
-                } else if noteStore.notes.isEmpty {
-                    Spacer()
-                    VStack(spacing: 8) {
-                        Image(systemName: "note.text")
-                            .font(.system(size: 40, weight: .ultraLight))
-                            .foregroundColor(Color(hex: "888888"))
-
-                        Text("No notes yet")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(Color(hex: "888888"))
-
-                        Text("Create your first note")
-                            .font(.system(size: 12))
-                            .foregroundColor(Color(hex: "999999"))
-                    }
-                    .frame(maxWidth: .infinity)
-                    Spacer()
-                } else if filteredNotes.isEmpty {
-                    Spacer()
-                    VStack(spacing: 8) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 40, weight: .ultraLight))
-                            .foregroundColor(Color(hex: "888888"))
-
-                        Text("No results")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(Color(hex: "888888"))
-
-                        Text("Try a different search term")
-                            .font(.system(size: 12))
-                            .foregroundColor(Color(hex: "999999"))
-                    }
-                    .frame(maxWidth: .infinity)
-                    Spacer()
-                } else {
-                    CustomScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(filteredNotes) { note in
-                                DrawerNoteListItemView(
-                                    note: note,
-                                    isSelected: selectedNote?.id == note.id,
-                                    isHovered: hoveredNoteId == note.id,
-                                    searchQuery: debouncedSearch
-                                )
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    selectedNote = note
-                                    onClose()
-                                }
-                                .onHover { hovering in
-                                    hoveredNoteId = hovering ? note.id : nil
-                                    if hovering {
-                                        NSCursor.arrow.push()
-                                    } else {
-                                        NSCursor.pop()
-                                    }
-                                }
-                                .contextMenu {
-                                    Button(action: {
-                                        Task {
-                                            let isDeletingCurrentNote = selectedNote?.id == note.id
-                                            await noteStore.deleteNote(note)
-
-                                            if isDeletingCurrentNote {
-                                                selectedNote = noteStore.notes.first
-                                            }
-                                        }
-                                    }) {
-                                        Label("Delete", systemImage: "trash")
-                                    }
-                                }
-                            }
-                        }
-                        .padding(.vertical, 8)
-                    }
-                }
-                } else {
-                    TodoListListView(
-                        listStore: listStore,
-                        todoStore: todoStore,
-                        selectedList: $selectedList,
-                        onClose: onClose
-                    )
-                }
-
-                Divider()
-                    .background(Color(hex: "E8E8E8"))
-
-                Button(action: {
-                    onOpenSettings()
-                    onClose()
-                }) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "gearshape")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(Color(hex: "888888"))
-
-                        Text("Settings")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(Color(hex: "666666"))
-
-                        Spacer()
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                }
-                .buttonStyle(PlainButtonStyle())
+                Spacer(minLength: 0)
             }
-            .frame(width: 280)
-            .background(Color(hex: "FAF9F6"))
-            .cornerRadius(12, corners: [.topRight, .bottomRight])
-            .shadow(color: Color.black.opacity(0.15), radius: 20, x: 4, y: 0)
-            .onAppear {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    isSearchFocused = true
-                }
+        }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                isSearchFocused = true
             }
         }
     }
-}
 
-// Note list item for drawer
-private struct DrawerNoteListItemView: View {
-    let note: Note
-    let isSelected: Bool
-    let isHovered: Bool
-    var searchQuery: String = ""
+    private var drawerHeader: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Notes Library")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(Color(hex: "242824"))
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(highlightedTitle)
-                .font(.system(size: 15, weight: .medium))
-                .lineLimit(1)
+                Text("\(noteStore.notes.count) note\(noteStore.notes.count == 1 ? "" : "s")")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(Color(hex: "8B8F89"))
+            }
 
-            Text(highlightedPreview)
-                .font(.system(size: 13))
-                .lineLimit(2)
+            Spacer(minLength: 10)
 
-            Text(relativeTime(from: note.updatedAt))
-                .font(.system(size: 10))
-                .foregroundColor(Color(hex: "999999"))
+            HStack(spacing: 6) {
+                DrawerIconButton(icon: "square.and.pencil", tooltip: "New Note") {
+                    onNewNote()
+                    onClose()
+                }
+
+                DrawerIconButton(icon: "gearshape", tooltip: "Settings") {
+                    onOpenSettings()
+                    onClose()
+                }
+
+                DrawerIconButton(icon: "xmark", tooltip: "Close") {
+                    onClose()
+                }
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(backgroundColor)
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
+        .padding(.bottom, 12)
+    }
+
+    private var searchBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(Color(hex: "8D928B"))
+
+            TextField("Search notes", text: $searchText)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(Color(hex: "2E332F"))
+                .focused($isSearchFocused)
+                .onChange(of: searchText) { newValue in
+                    searchTask?.cancel()
+                    let task = DispatchWorkItem {
+                        debouncedSearch = newValue
+                    }
+                    searchTask = task
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.22, execute: task)
+                }
+
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                    debouncedSearch = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(Color(hex: "9CA099"))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 11)
+                .fill(Color(hex: "F3F6F1"))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 11)
+                        .stroke(Color(hex: "E3E8DF"), lineWidth: 1)
+                )
+        )
+        .padding(.horizontal, 16)
+        .padding(.bottom, 10)
+    }
+
+    private var drawerBody: some View {
+        Group {
+            if noteStore.isLoading {
+                VStack(spacing: 10) {
+                    Spacer()
+                    ProgressView()
+                    Text("Loading notes...")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(Color(hex: "9AA097"))
+                    Spacer()
+                }
+            } else if noteStore.notes.isEmpty {
+                drawerState(
+                    icon: "note.text",
+                    title: "No notes yet",
+                    subtitle: "Create your first note to get started"
+                )
+            } else if filteredNotes.isEmpty {
+                drawerState(
+                    icon: "magnifyingglass",
+                    title: "No results",
+                    subtitle: "Try a different keyword"
+                )
+            } else {
+                CustomScrollView {
+                    LazyVStack(spacing: 8) {
+                        ForEach(filteredNotes) { note in
+                            DrawerNoteListItemCard(
+                                note: note,
+                                isSelected: selectedNote?.id == note.id,
+                                isHovered: hoveredNoteId == note.id,
+                                searchQuery: debouncedSearch
+                            )
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                selectedNote = note
+                                onClose()
+                            }
+                            .onHover { hovering in
+                                hoveredNoteId = hovering ? note.id : nil
+                            }
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    Task {
+                                        let deletingSelected = selectedNote?.id == note.id
+                                        await noteStore.deleteNote(note)
+                                        if deletingSelected {
+                                            selectedNote = noteStore.notes.first
+                                        }
+                                    }
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var drawerFooter: some View {
+        HStack {
+            Text("New note: ⌘N")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(Color(hex: "A0A59F"))
+
+            Spacer()
+
+            Text("Switch: ⌘1 / ⌘2")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(Color(hex: "A0A59F"))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
         .overlay(
             Rectangle()
-                .stroke(Color(hex: "7C9885").opacity(0.3), lineWidth: 1)
-                .opacity(isSelected ? 1 : 0)
+                .fill(Color(hex: "E7EBE4"))
+                .frame(height: 1),
+            alignment: .top
+        )
+        .background(Color(hex: "FCFDFC"))
+        .clipShape(
+            RoundedRectangle(cornerRadius: 24)
         )
     }
 
-    private var backgroundColor: Color {
-        if isSelected {
-            return Color(hex: "7C9885").opacity(0.08)
-        } else if isHovered {
-            return Color(hex: "F0F0F0")
-        } else {
-            return Color.clear
+    private func drawerState(icon: String, title: String, subtitle: String) -> some View {
+        VStack(spacing: 8) {
+            Spacer()
+
+            Image(systemName: icon)
+                .font(.system(size: 34, weight: .light))
+                .foregroundColor(Color(hex: "9EA39D"))
+
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(Color(hex: "727771"))
+
+            Text(subtitle)
+                .font(.system(size: 12))
+                .foregroundColor(Color(hex: "A0A59F"))
+
+            Spacer()
         }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 20)
+    }
+}
+
+private struct DrawerIconButton: View {
+    let icon: String
+    let tooltip: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(Color(hex: "606660"))
+                .frame(width: 30, height: 30)
+                .background(
+                    RoundedRectangle(cornerRadius: 9)
+                        .fill(Color(hex: "EFF3ED"))
+                )
+        }
+        .buttonStyle(.plain)
+        .help(tooltip)
+    }
+}
+
+private struct DrawerNoteListItemCard: View {
+    let note: Note
+    let isSelected: Bool
+    let isHovered: Bool
+    let searchQuery: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                Text(highlightedTitle)
+                    .font(.system(size: 14, weight: .semibold))
+                    .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                Text(relativeTime(from: note.updatedAt))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(Color(hex: "A0A59F"))
+            }
+
+            Text(highlightedPreview)
+                .font(.system(size: 12, weight: .regular))
+                .lineLimit(2)
+
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(Color(hex: "7C9885"))
+                    .frame(width: 5, height: 5)
+                    .opacity(isSelected ? 1 : 0)
+
+                Text(noteTitle)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(Color(hex: "9DA39C"))
+                    .lineLimit(1)
+
+                Spacer()
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .background(cardBackground)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isSelected ? Color(hex: "7C9885").opacity(0.45) : Color.clear, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var cardBackground: some ShapeStyle {
+        if isSelected {
+            return AnyShapeStyle(Color(hex: "7C9885").opacity(0.13))
+        }
+        if isHovered {
+            return AnyShapeStyle(Color(hex: "F1F4EE"))
+        }
+        return AnyShapeStyle(Color(hex: "FAFBF8"))
+    }
+
+    private var noteTitle: String {
+        let normalized = note.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.isEmpty ? "Untitled" : normalized
     }
 
     private var notePreview: String {
         let preview = note.content.replacingOccurrences(of: "\n", with: " ")
-        return String(preview.prefix(80))
+        let normalized = preview.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.isEmpty ? "No content" : String(normalized.prefix(120))
     }
 
     private var highlightedTitle: AttributedString {
-        let title = note.title.isEmpty ? "Untitled" : note.title
-        return highlight(text: title, query: searchQuery, baseColor: Color(hex: "2C2C2C"))
+        highlight(text: noteTitle, query: searchQuery, baseColor: Color(hex: "2D322F"))
     }
 
     private var highlightedPreview: AttributedString {
-        return highlight(text: notePreview, query: searchQuery, baseColor: Color(hex: "888888"))
+        highlight(text: notePreview, query: searchQuery, baseColor: Color(hex: "798078"))
     }
 
     private func highlight(text: String, query: String, baseColor: Color) -> AttributedString {
@@ -326,10 +365,11 @@ private struct DrawerNoteListItemView: View {
         var searchStart = lowerText.startIndex
 
         while let range = lowerText.range(of: lowerQuery, range: searchStart..<lowerText.endIndex) {
-            let attrRange = AttributedString.Index(range.lowerBound, within: attributed)!
-                ..< AttributedString.Index(range.upperBound, within: attributed)!
-            attributed[attrRange].foregroundColor = Color(hex: "7C9885")
-            attributed[attrRange].backgroundColor = Color(hex: "7C9885").opacity(0.15)
+            if let lower = AttributedString.Index(range.lowerBound, within: attributed),
+               let upper = AttributedString.Index(range.upperBound, within: attributed) {
+                attributed[lower..<upper].foregroundColor = Color(hex: "5E7D68")
+                attributed[lower..<upper].backgroundColor = Color(hex: "BFD3C4").opacity(0.35)
+            }
             searchStart = range.upperBound
         }
 
@@ -340,126 +380,34 @@ private struct DrawerNoteListItemView: View {
         let seconds = Int(Date().timeIntervalSince(date))
 
         if seconds < 60 {
-            return "Just now"
-        } else if seconds < 3600 {
-            let minutes = seconds / 60
-            return "\(minutes) min ago"
-        } else if seconds < 86400 {
-            let hours = seconds / 3600
-            return "\(hours) hour\(hours > 1 ? "s" : "") ago"
-        } else if seconds < 604800 {
-            let days = seconds / 86400
-            return "\(days) day\(days > 1 ? "s" : "") ago"
-        } else {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "MMM d"
-            return formatter.string(from: date)
+            return "now"
         }
-    }
-}
-
-// Helper extension for custom corner radius
-extension View {
-    func cornerRadius(_ radius: CGFloat, corners: RectCorner) -> some View {
-        clipShape(RoundedCorner(radius: radius, corners: corners))
-    }
-}
-
-struct RectCorner: OptionSet {
-    let rawValue: Int
-    static let topLeft = RectCorner(rawValue: 1 << 0)
-    static let topRight = RectCorner(rawValue: 1 << 1)
-    static let bottomLeft = RectCorner(rawValue: 1 << 2)
-    static let bottomRight = RectCorner(rawValue: 1 << 3)
-    static let allCorners: RectCorner = [.topLeft, .topRight, .bottomLeft, .bottomRight]
-}
-
-struct RoundedCorner: Shape {
-    var radius: CGFloat = .infinity
-    var corners: RectCorner = .allCorners
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-
-        let tl = corners.contains(.topLeft) ? radius : 0
-        let tr = corners.contains(.topRight) ? radius : 0
-        let bl = corners.contains(.bottomLeft) ? radius : 0
-        let br = corners.contains(.bottomRight) ? radius : 0
-
-        path.move(to: CGPoint(x: rect.minX + tl, y: rect.minY))
-
-        // Top edge and top-right corner
-        path.addLine(to: CGPoint(x: rect.maxX - tr, y: rect.minY))
-        if tr > 0 {
-            path.addArc(
-                center: CGPoint(x: rect.maxX - tr, y: rect.minY + tr),
-                radius: tr,
-                startAngle: Angle(degrees: -90),
-                endAngle: Angle(degrees: 0),
-                clockwise: false
-            )
+        if seconds < 3600 {
+            return "\(seconds / 60)m"
+        }
+        if seconds < 86400 {
+            return "\(seconds / 3600)h"
+        }
+        if seconds < 604800 {
+            return "\(seconds / 86400)d"
         }
 
-        // Right edge and bottom-right corner
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - br))
-        if br > 0 {
-            path.addArc(
-                center: CGPoint(x: rect.maxX - br, y: rect.maxY - br),
-                radius: br,
-                startAngle: Angle(degrees: 0),
-                endAngle: Angle(degrees: 90),
-                clockwise: false
-            )
-        }
-
-        // Bottom edge and bottom-left corner
-        path.addLine(to: CGPoint(x: rect.minX + bl, y: rect.maxY))
-        if bl > 0 {
-            path.addArc(
-                center: CGPoint(x: rect.minX + bl, y: rect.maxY - bl),
-                radius: bl,
-                startAngle: Angle(degrees: 90),
-                endAngle: Angle(degrees: 180),
-                clockwise: false
-            )
-        }
-
-        // Left edge and top-left corner
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + tl))
-        if tl > 0 {
-            path.addArc(
-                center: CGPoint(x: rect.minX + tl, y: rect.minY + tl),
-                radius: tl,
-                startAngle: Angle(degrees: 180),
-                endAngle: Angle(degrees: 270),
-                clockwise: false
-            )
-        }
-
-        return path
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        return formatter.string(from: date)
     }
 }
 
 #Preview {
-    @Previewable @State var activeTab = "notes"
     @Previewable @State var selectedNote: Note? = nil
-    @Previewable @State var selectedList: TodoList? = nil
     let noteStore = NoteStore()
-    let todoStore = TodoStore()
-    let listStore = TodoListStore()
 
     return NoteListDrawer(
         noteStore: noteStore,
-        todoStore: todoStore,
-        listStore: listStore,
-        activeTab: $activeTab,
         selectedNote: $selectedNote,
-        selectedList: $selectedList,
         onNewNote: {},
-        onNewTodo: {},
-        onToggleTodoCompletion: { _ in },
         onClose: {},
         onOpenSettings: {}
     )
-    .frame(width: 800, height: 600)
+    .frame(width: 900, height: 600)
 }

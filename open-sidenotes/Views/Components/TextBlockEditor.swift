@@ -46,7 +46,6 @@ struct TextBlockEditor: NSViewRepresentable {
     @Binding var showLanguageSelector: Bool
 
     func makeNSView(context: Context) -> SelfSizingTextView {
-        print("🆕 [TextBlockEditor] makeNSView called")
         let containerView = SelfSizingTextView(frame: .zero)
         let textView = containerView.textView
 
@@ -59,7 +58,6 @@ struct TextBlockEditor: NSViewRepresentable {
         textView.textColor = NSColor(red: 0.17, green: 0.17, blue: 0.17, alpha: 1.0)
         textView.textContainerInset = NSSize(width: 0, height: 0)
         textView.delegate = context.coordinator
-        print("🆕 [TextBlockEditor] TextView created and configured")
 
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
@@ -90,9 +88,6 @@ struct TextBlockEditor: NSViewRepresentable {
         context.coordinator.containerView = containerView
         context.coordinator.renderMarkdown(in: textView, text: text)
 
-        print("🆕 [TextBlockEditor] Initial text length: \(text.count)")
-        print("🆕 [TextBlockEditor] Initial text preview: '\(String(text.prefix(100)))'")
-
         return containerView
     }
 
@@ -106,19 +101,13 @@ struct TextBlockEditor: NSViewRepresentable {
         }
 
         if textView.string != text && !context.coordinator.isUpdating {
-            print("🔄 [TextBlockEditor] updateNSView: text changed")
-            print("🔄 [TextBlockEditor] Old text length: \(textView.string.count)")
-            print("🔄 [TextBlockEditor] New text length: \(text.count)")
-            print("🔄 [TextBlockEditor] New text preview: '\(String(text.prefix(100)))'")
             context.coordinator.renderMarkdown(in: textView, text: text)
         }
 
         if let language = selectedLanguage, context.coordinator.lastSelectedLanguage != language {
-            print("🟣 [TextBlockEditor] updateNSView: selectedLanguage changed to \(language.displayName)")
             context.coordinator.lastSelectedLanguage = language
             context.coordinator.insertCodeBlock(in: textView, language: language)
             DispatchQueue.main.async {
-                print("🟣 [TextBlockEditor] Clearing selectedLanguage")
                 self.selectedLanguage = nil
             }
         }
@@ -143,9 +132,7 @@ struct TextBlockEditor: NSViewRepresentable {
             if commandSelector == #selector(NSResponder.deleteBackward(_:)) {
                 let cursorPosition = textView.selectedRange().location
                 if cursorPosition == 0 && textView.string.isEmpty {
-                    print("🗑️ [TextBlockEditor] Delete at beginning of empty block")
                     if let callback = parent.onDeletePreviousBlock, callback() {
-                        print("✅ [TextBlockEditor] Previous block deleted")
                         return true
                     }
                 }
@@ -254,17 +241,11 @@ struct TextBlockEditor: NSViewRepresentable {
         }
 
         func insertSlashCommand(in textView: NSTextView, command: SlashCommand) {
-            print("🔵 [TextBlockEditor] insertSlashCommand called, command: \(command.trigger)")
-
             guard let range = slashCommandRange else {
-                print("❌ [TextBlockEditor] slashCommandRange is nil!")
                 return
             }
 
-            print("✅ [TextBlockEditor] slashCommandRange exists: \(range)")
-
             if command.needsLanguageSelector {
-                print("🟡 [TextBlockEditor] Command needs language selector")
                 parent.showSlashMenu = false
                 parent.slashMenuQuery = ""
                 parent.slashMenuSelectedIndex = 0
@@ -291,29 +272,16 @@ struct TextBlockEditor: NSViewRepresentable {
         }
 
         func insertCodeBlock(in textView: NSTextView, language: CodeLanguage) {
-            print("🟢 [TextBlockEditor] insertCodeBlock called, language: \(language.displayName)")
-
             guard let range = slashCommandRange else {
-                print("❌ [TextBlockEditor] insertCodeBlock: slashCommandRange is nil!")
                 return
             }
-
-            print("✅ [TextBlockEditor] insertCodeBlock: slashCommandRange exists: \(range)")
 
             let languageId = language.highlightIdentifier
             let template = languageId.isEmpty ? "```\n\n```" : "```\(languageId)\n\n```"
 
-            print("📝 [TextBlockEditor] Template to insert: '\(template)'")
-            print("📍 [TextBlockEditor] Insert position: \(range.location), length: \(range.length)")
-
             if textView.shouldChangeText(in: range, replacementString: template) {
-                print("✅ [TextBlockEditor] shouldChangeText returned true")
                 textView.textStorage?.replaceCharacters(in: range, with: template)
                 textView.didChangeText()
-                print("✅ [TextBlockEditor] Text replaced and didChangeText called")
-                print("📄 [TextBlockEditor] New text content: '\(textView.string)'")
-            } else {
-                print("❌ [TextBlockEditor] shouldChangeText returned false!")
             }
 
             slashCommandRange = nil

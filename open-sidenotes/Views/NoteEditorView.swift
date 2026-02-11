@@ -7,6 +7,7 @@ struct NoteEditorView: View {
     @Binding var title: String
     @Binding var content: String
     var onToggleDrawer: () -> Void
+    var showMenuButton: Bool = true
 
     @State private var isHoveringMenu = false
     @State private var showFindBar = false
@@ -15,33 +16,73 @@ struct NoteEditorView: View {
     @State private var showReplace = false
     @State private var matches: [Range<String.Index>] = []
     @State private var currentMatchIndex = 0
+    @State private var isHoveringFindButton = false
+
+    private var wordCount: Int {
+        content
+            .split { $0.isWhitespace || $0.isNewline }
+            .count
+    }
+
+    private var contentStats: String {
+        "\(wordCount) words · \(content.count) chars"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Menu button toolbar
             HStack {
-                Button(action: onToggleDrawer) {
-                    Image(systemName: "line.3.horizontal")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(Color(hex: "7C9885"))
-                        .frame(width: 32, height: 32)
-                        .background(
-                            Circle()
-                                .fill(isHoveringMenu ? Color(hex: "7C9885").opacity(0.15) : Color(hex: "7C9885").opacity(0.08))
-                        )
-                }
-                .buttonStyle(PlainButtonStyle())
-                .onHover { hovering in
-                    isHoveringMenu = hovering
+                if showMenuButton {
+                    Button(action: onToggleDrawer) {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(Color(hex: "7C9885"))
+                            .frame(width: 32, height: 32)
+                            .background(
+                                Circle()
+                                    .fill(isHoveringMenu ? Color(hex: "7C9885").opacity(0.15) : Color(hex: "7C9885").opacity(0.08))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        isHoveringMenu = hovering
+                    }
                 }
 
                 Spacer()
+
+                if isEditing || !content.isEmpty {
+                    Text(contentStats)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(Color(hex: "9AA097"))
+                }
+
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        showFindBar.toggle()
+                    }
+                }) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(Color(hex: "66716A"))
+                        .frame(width: 28, height: 28)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(isHoveringFindButton ? Color(hex: "EEF1EC") : Color(hex: "F6F7F4"))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color(hex: "E2E6DE"), lineWidth: 1)
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
+                .onHover { hovering in
+                    isHoveringFindButton = hovering
+                }
             }
             .padding(.horizontal, 32)
             .padding(.top, 16)
             .padding(.bottom, 8)
 
-            // Find/Replace bar
             if showFindBar {
                 FindReplaceBar(
                     searchText: $findText,
@@ -61,7 +102,7 @@ struct NoteEditorView: View {
             if isEditing || selectedNote == nil {
                 VStack(alignment: .leading, spacing: 0) {
                     TextField("Untitled", text: $title)
-                        .font(.system(size: 28, weight: .semibold))
+                        .font(.system(size: 26, weight: .semibold))
                         .foregroundColor(Color(hex: "2C2C2C"))
                         .textFieldStyle(.plain)
                         .padding(.horizontal, 32)
@@ -93,11 +134,6 @@ struct NoteEditorView: View {
                     BlockEditor(content: $content)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .id(selectedNote?.id)
-                        .onAppear {
-                            print("🎯 [NoteEditorView] BlockEditor appeared")
-                            print("🎯 [NoteEditorView] Content: '\(String(content.prefix(100)))'")
-                            print("🎯 [NoteEditorView] SelectedNote ID: \(selectedNote?.id.uuidString ?? "nil")")
-                        }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
@@ -126,17 +162,10 @@ struct NoteEditorView: View {
         .onChange(of: findText) { _ in
             updateMatches()
         }
-        .onChange(of: content) { newValue in
-            print("📄 [NoteEditorView] content changed")
-            print("📄 [NoteEditorView] New content length: \(newValue.count)")
+        .onChange(of: content) { _ in
             if showFindBar {
                 updateMatches()
             }
-        }
-        .onChange(of: selectedNote) { newNote in
-            print("📌 [NoteEditorView] selectedNote changed")
-            print("📌 [NoteEditorView] New note ID: \(newNote?.id.uuidString ?? "nil")")
-            print("📌 [NoteEditorView] New note title: '\(newNote?.title ?? "nil")'")
         }
         .background(
             Button("") {

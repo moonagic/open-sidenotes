@@ -8,7 +8,6 @@ struct CodeBlockEditor: NSViewRepresentable {
     let onCodeChange: (String) -> Void
 
     func makeNSView(context: Context) -> NSView {
-        print("🆕 [CodeBlockEditor] makeNSView called for language: \(language.displayName)")
         let containerView = NSView()
         containerView.wantsLayer = true
         containerView.layer?.backgroundColor = NSColor(red: 0.96, green: 0.96, blue: 0.96, alpha: 1.0).cgColor

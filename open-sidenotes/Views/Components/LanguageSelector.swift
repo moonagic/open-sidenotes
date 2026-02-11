@@ -46,21 +46,18 @@ struct LanguageSelector: View {
                 self.eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                     self.handleKeyEvent(event)
                 }
-                print("🎹 [LanguageSelector] Keyboard monitor added")
             }
         }
         .onDisappear {
             if let monitor = eventMonitor {
                 NSEvent.removeMonitor(monitor)
                 eventMonitor = nil
-                print("🎹 [LanguageSelector] Keyboard monitor removed")
             }
         }
     }
 
     private func handleKeyEvent(_ event: NSEvent) -> NSEvent? {
         guard isReady else {
-            print("🎹 [LanguageSelector] Not ready yet, ignoring key event")
             return event
         }
 
@@ -78,7 +75,6 @@ struct LanguageSelector: View {
             selectedIndex = max(0, selectedIndex - 2)
             return nil
         case 36:
-            print("🎹 [LanguageSelector] Enter pressed, selecting: \(languages[selectedIndex].displayName)")
             onSelect(languages[selectedIndex])
             return nil
         case 53:
