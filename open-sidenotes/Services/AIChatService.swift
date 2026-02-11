@@ -45,34 +45,107 @@ final class AIChatSettings: ObservableObject {
 
 @MainActor
 final class AIChatService: ObservableObject {
-    @Published var messages: [ChatMessage] = []
+    @Published private(set) var sessions: [ChatSession] = []
+    @Published private(set) var currentSessionId: UUID?
+    @Published private(set) var messages: [ChatMessage] = []
     @Published var inputText: String = ""
     @Published var isSending: Bool = false
     @Published var errorMessage: String?
 
     private let settings = AIChatSettings.shared
     private let systemPrompt = "You are an assistant inside a macOS notes app. Answer clearly and concisely in the user's language."
-    private let messagesStorageKey = "openai_chat_messages_v1"
+
+    private let sessionsStorageKey = "openai_chat_sessions_v1"
+    private let currentSessionIdKey = "openai_chat_current_session_id_v1"
+    private let legacyMessagesStorageKey = "openai_chat_messages_v1"
+
+    private let maxStoredSessions = 40
     private let maxStoredMessages = 80
     private let maxMessagesForRequest = 20
     private let maxNoteContextCharacters = 6000
 
-    init() {
-        if let restored = loadStoredMessages(), !restored.isEmpty {
-            messages = restored
-        } else {
-            messages = [welcomeMessage]
-            persistMessages()
+    var orderedSessions: [ChatSession] {
+        sessions.sorted {
+            if $0.updatedAt == $1.updatedAt {
+                return $0.createdAt > $1.createdAt
+            }
+            return $0.updatedAt > $1.updatedAt
         }
     }
 
+    var currentSession: ChatSession? {
+        guard let currentSessionId else { return nil }
+        return sessions.first(where: { $0.id == currentSessionId })
+    }
+
+    var currentSessionTitle: String {
+        currentSession?.title ?? "New Chat"
+    }
+
+    init() {
+        bootstrapSessions()
+    }
+
+    func startNewSession() {
+        let session = ChatSession(
+            title: "New Chat",
+            messages: [newConversationMessage]
+        )
+        sessions.insert(session, at: 0)
+        currentSessionId = session.id
+        inputText = ""
+        errorMessage = nil
+        reconcileState(shouldPersist: true)
+    }
+
+    func switchSession(to sessionId: UUID) {
+        guard sessions.contains(where: { $0.id == sessionId }) else { return }
+        currentSessionId = sessionId
+        inputText = ""
+        errorMessage = nil
+        syncMessagesFromCurrentSession()
+        persistSessions()
+    }
+
+    func renameSession(id sessionId: UUID, to title: String) {
+        let normalized = normalizeTitle(title)
+        guard !normalized.isEmpty else { return }
+
+        mutateSession(id: sessionId) { session in
+            session.title = normalized
+        }
+    }
+
+    func deleteSession(id sessionId: UUID) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionId }) else { return }
+
+        if sessions.count == 1 {
+            clearConversation()
+            return
+        }
+
+        let deletingCurrent = sessionId == currentSessionId
+        sessions.remove(at: index)
+
+        if deletingCurrent {
+            currentSessionId = sessions.first?.id
+        }
+
+        reconcileState(shouldPersist: true)
+    }
+
     func clearConversation() {
-        messages = [
-            ChatMessage(role: .assistant, content: "新的对话已开始。")
-        ]
+        guard let sessionId = currentSessionId else {
+            startNewSession()
+            return
+        }
+
+        mutateSession(id: sessionId) { session in
+            session.messages = [newConversationMessage]
+        }
+
         errorMessage = nil
         inputText = ""
-        persistMessages()
     }
 
     func sendCurrentMessage(noteContext: ChatNoteContext? = nil) async {
@@ -85,17 +158,39 @@ final class AIChatService: ObservableObject {
             return
         }
 
+        if currentSessionId == nil {
+            startNewSession()
+        }
+
+        guard let sendingSessionId = currentSessionId else { return }
+
         let userMessage = ChatMessage(role: .user, content: trimmed)
-        messages.append(userMessage)
-        persistMessages()
+        let suggestedTitle = shouldAutoNameSession(id: sendingSessionId)
+            ? inferSessionTitle(from: trimmed)
+            : nil
+
+        mutateSession(id: sendingSessionId) { session in
+            session.messages.append(userMessage)
+            if let suggestedTitle {
+                session.title = suggestedTitle
+            }
+        }
+
         inputText = ""
         errorMessage = nil
         isSending = true
 
+        let requestHistory = Array(messagesForSession(id: sendingSessionId).suffix(maxMessagesForRequest))
+
         do {
-            let reply = try await requestCompletion(apiKey: apiKey, noteContext: noteContext)
-            messages.append(ChatMessage(role: .assistant, content: reply))
-            persistMessages()
+            let reply = try await requestCompletion(
+                apiKey: apiKey,
+                noteContext: noteContext,
+                historyMessages: requestHistory
+            )
+            mutateSession(id: sendingSessionId) { session in
+                session.messages.append(ChatMessage(role: .assistant, content: reply))
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -103,7 +198,7 @@ final class AIChatService: ObservableObject {
         isSending = false
     }
 
-    private func requestCompletion(apiKey: String, noteContext: ChatNoteContext?) async throws -> String {
+    private func requestCompletion(apiKey: String, noteContext: ChatNoteContext?, historyMessages: [ChatMessage]) async throws -> String {
         guard let url = URL(string: "https://api.openai.com/v1/chat/completions") else {
             throw AIChatServiceError.invalidURL
         }
@@ -113,7 +208,7 @@ final class AIChatService: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
 
-        let history = Array(messages.suffix(maxMessagesForRequest)).map {
+        let history = historyMessages.map {
             ChatCompletionRequest.Message(role: $0.role.rawValue, content: $0.content)
         }
 
@@ -157,21 +252,168 @@ final class AIChatService: ObservableObject {
         return content
     }
 
+    private func bootstrapSessions() {
+        if let storedSessions = loadStoredSessions(), !storedSessions.isEmpty {
+            sessions = storedSessions
+        } else if let legacyMessages = loadLegacyMessages(), !legacyMessages.isEmpty {
+            sessions = [
+                ChatSession(
+                    title: "Imported Chat",
+                    createdAt: legacyMessages.first?.createdAt ?? Date(),
+                    updatedAt: legacyMessages.last?.createdAt ?? Date(),
+                    messages: legacyMessages
+                )
+            ]
+            UserDefaults.standard.removeObject(forKey: legacyMessagesStorageKey)
+        } else {
+            sessions = [
+                ChatSession(
+                    title: "New Chat",
+                    messages: [welcomeMessage]
+                )
+            ]
+        }
+
+        if let storedCurrentSession = loadStoredCurrentSessionID(),
+           sessions.contains(where: { $0.id == storedCurrentSession }) {
+            currentSessionId = storedCurrentSession
+        } else {
+            currentSessionId = sessions.first?.id
+        }
+
+        reconcileState(shouldPersist: true)
+    }
+
+    private func mutateSession(id sessionId: UUID, touchUpdatedAt: Bool = true, _ mutation: (inout ChatSession) -> Void) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionId }) else { return }
+
+        var session = sessions[index]
+        mutation(&session)
+
+        session.messages = Array(session.messages.suffix(maxStoredMessages))
+        session.title = normalizeTitle(session.title)
+        if touchUpdatedAt {
+            session.updatedAt = Date()
+        }
+
+        sessions[index] = session
+        reconcileState(shouldPersist: true)
+    }
+
+    private func reconcileState(shouldPersist: Bool) {
+        sessions = normalizeSessions(sessions)
+
+        if sessions.isEmpty {
+            sessions = [ChatSession(title: "New Chat", messages: [welcomeMessage])]
+        }
+
+        if let currentSessionId,
+           sessions.contains(where: { $0.id == currentSessionId }) {
+            // keep current
+        } else {
+            currentSessionId = sessions.first?.id
+        }
+
+        syncMessagesFromCurrentSession()
+
+        if shouldPersist {
+            persistSessions()
+        }
+    }
+
+    private func syncMessagesFromCurrentSession() {
+        messages = currentSession?.messages ?? []
+    }
+
+    private func normalizeSessions(_ source: [ChatSession]) -> [ChatSession] {
+        var normalized = source.map { session in
+            var session = session
+            session.title = normalizeTitle(session.title)
+            session.messages = Array(session.messages.suffix(maxStoredMessages))
+
+            if session.messages.isEmpty {
+                session.messages = [newConversationMessage]
+            }
+
+            return session
+        }
+
+        normalized.sort {
+            if $0.updatedAt == $1.updatedAt {
+                return $0.createdAt > $1.createdAt
+            }
+            return $0.updatedAt > $1.updatedAt
+        }
+
+        if normalized.count > maxStoredSessions {
+            normalized = Array(normalized.prefix(maxStoredSessions))
+        }
+
+        return normalized
+    }
+
+    private func messagesForSession(id sessionId: UUID) -> [ChatMessage] {
+        sessions.first(where: { $0.id == sessionId })?.messages ?? []
+    }
+
+    private func shouldAutoNameSession(id sessionId: UUID) -> Bool {
+        guard let session = sessions.first(where: { $0.id == sessionId }) else { return false }
+        let normalized = normalizeTitle(session.title)
+        return normalized == "New Chat" || normalized == "Imported Chat"
+    }
+
+    private func inferSessionTitle(from text: String) -> String {
+        let singleLine = text
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\t", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !singleLine.isEmpty else { return "New Chat" }
+
+        let parts = singleLine.split(separator: " ").prefix(8)
+        let joined = parts.joined(separator: " ")
+        return normalizeTitle(joined)
+    }
+
+    private func normalizeTitle(_ title: String) -> String {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return "New Chat" }
+        return String(trimmed.prefix(60))
+    }
+
     private var welcomeMessage: ChatMessage {
         ChatMessage(role: .assistant, content: "你好，我已经在侧边笔记里了。你可以让我帮你整理、改写、总结、规划。")
     }
 
-    private func loadStoredMessages() -> [ChatMessage]? {
-        guard let data = UserDefaults.standard.data(forKey: messagesStorageKey) else {
+    private var newConversationMessage: ChatMessage {
+        ChatMessage(role: .assistant, content: "新的对话已开始。")
+    }
+
+    private func loadStoredSessions() -> [ChatSession]? {
+        guard let data = UserDefaults.standard.data(forKey: sessionsStorageKey) else {
+            return nil
+        }
+        return try? JSONDecoder().decode([ChatSession].self, from: data)
+    }
+
+    private func loadLegacyMessages() -> [ChatMessage]? {
+        guard let data = UserDefaults.standard.data(forKey: legacyMessagesStorageKey) else {
             return nil
         }
         return try? JSONDecoder().decode([ChatMessage].self, from: data)
     }
 
-    private func persistMessages() {
-        let capped = Array(messages.suffix(maxStoredMessages))
-        guard let data = try? JSONEncoder().encode(capped) else { return }
-        UserDefaults.standard.set(data, forKey: messagesStorageKey)
+    private func loadStoredCurrentSessionID() -> UUID? {
+        guard let raw = UserDefaults.standard.string(forKey: currentSessionIdKey) else {
+            return nil
+        }
+        return UUID(uuidString: raw)
+    }
+
+    private func persistSessions() {
+        guard let data = try? JSONEncoder().encode(sessions) else { return }
+        UserDefaults.standard.set(data, forKey: sessionsStorageKey)
+        UserDefaults.standard.set(currentSessionId?.uuidString, forKey: currentSessionIdKey)
     }
 }
 

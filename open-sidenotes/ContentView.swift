@@ -109,7 +109,7 @@ struct ContentView: View {
                         if mode == .notes {
                             createNewNote()
                         } else {
-                            chatService.clearConversation()
+                            chatService.startNewSession()
                         }
                     },
                     onOpenSettings: {
@@ -137,6 +137,9 @@ struct ContentView: View {
                         },
                         onOpenSettings: {
                             openSettings()
+                        },
+                        onAskAI: {
+                            askAIFromCurrentNote()
                         }
                     )
                     .frame(height: 56)
@@ -231,6 +234,24 @@ struct ContentView: View {
 
     private func openSettings() {
         NotificationCenter.default.post(name: .openSettingsWindow, object: nil)
+    }
+
+    private func askAIFromCurrentNote() {
+        withAnimation(.easeInOut(duration: 0.15)) {
+            mode = .chat
+            showDrawer = false
+        }
+
+        chatService.startNewSession()
+
+        if let context = currentNoteContext {
+            chatService.inputText = "请基于当前笔记总结重点，并给出 3 个下一步建议。"
+            if context.content.count < 80 {
+                chatService.inputText = "请帮我把这条笔记扩展成更完整清晰的内容。"
+            }
+        } else {
+            chatService.inputText = "我想快速记录一个新想法，请先问我 3 个澄清问题。"
+        }
     }
 
     private func bootstrapNotes() async {
@@ -368,7 +389,7 @@ struct ContentView: View {
                 if mode == .notes {
                     createNewNote()
                 } else {
-                    chatService.clearConversation()
+                    chatService.startNewSession()
                 }
             }
             .keyboardShortcut("n", modifiers: .command)
@@ -484,6 +505,7 @@ private struct WorkspaceHeader: View {
     let onSelectMode: (WorkspaceMode) -> Void
     let onToggleDrawer: () -> Void
     let onOpenSettings: () -> Void
+    let onAskAI: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -506,6 +528,13 @@ private struct WorkspaceHeader: View {
                 WorkspaceModeSwitcher(mode: $mode, onSelectMode: onSelectMode)
 
                 if mode == .notes {
+                    if let onAskAI {
+                        HeaderIconButton(
+                            icon: "sparkles",
+                            tooltip: "Ask AI with current note",
+                            action: onAskAI
+                        )
+                    }
                     HeaderIconButton(icon: "sidebar.left", tooltip: "Toggle notes drawer", action: onToggleDrawer)
                 }
 
