@@ -65,6 +65,7 @@ It defines product direction, implementation guardrails, and delivery standards.
 ## Collaboration Rules
 
 - Codex may commit proactively without asking each time.
+- Codex decides autonomously whether to commit and push based on task scope and risk.
 - Commit at logical, testable milestones.
 - Use clear commit messages describing user-visible outcomes.
 - If unexpected repo changes appear mid-task, stop and ask before proceeding.
