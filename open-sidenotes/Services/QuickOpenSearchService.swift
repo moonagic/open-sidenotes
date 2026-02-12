@@ -1,26 +1,67 @@
 import Foundation
 
 enum QuickOpenSearchService {
+    struct IndexedNote {
+        let note: Note
+        let title: String
+        let content: String
+    }
+
+    private static let indexedContentCharacterLimit = 2400
+    private static let maxQueryTokens = 6
+
+    static func buildIndex(from notes: [Note]) -> [IndexedNote] {
+        notes.map { note in
+            let limitedContent = String(note.content.prefix(indexedContentCharacterLimit))
+            let normalizedContent = limitedContent
+                .replacingOccurrences(of: "\n", with: " ")
+                .lowercased()
+
+            return IndexedNote(
+                note: note,
+                title: note.title.lowercased(),
+                content: normalizedContent
+            )
+        }
+    }
+
     static func rankedNotes(
         from notes: [Note],
         query: String,
         recentNoteIDs: [UUID],
         limit: Int = 24
     ) -> [Note] {
+        rankedNotes(
+            from: buildIndex(from: notes),
+            query: query,
+            recentNoteIDs: recentNoteIDs,
+            limit: limit
+        )
+    }
+
+    static func rankedNotes(
+        from indexedNotes: [IndexedNote],
+        query: String,
+        recentNoteIDs: [UUID],
+        limit: Int = 24
+    ) -> [Note] {
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let tokens = trimmedQuery
+            .split(whereSeparator: \.isWhitespace)
+            .prefix(maxQueryTokens)
+            .map(String.init)
         let recentRank = Dictionary(uniqueKeysWithValues: recentNoteIDs.enumerated().map { ($1, $0) })
 
-        let scored = notes.compactMap { note -> (note: Note, score: Int, recentOrder: Int)? in
-            let recentOrder = recentRank[note.id] ?? Int.max
+        let scored = indexedNotes.compactMap { indexedNote -> (note: Note, score: Int, recentOrder: Int)? in
+            let recentOrder = recentRank[indexedNote.note.id] ?? Int.max
             let recentBonus = recentOrder == Int.max ? 0 : max(0, 80 - recentOrder * 3)
 
             guard !trimmedQuery.isEmpty else {
-                return (note, recentBonus, recentOrder)
+                return (indexedNote.note, recentBonus, recentOrder)
             }
 
-            let title = note.title.lowercased()
-            let content = note.content.lowercased()
-            let tokens = trimmedQuery.split(separator: " ").map(String.init)
+            let title = indexedNote.title
+            let content = indexedNote.content
 
             var score = recentBonus
 
@@ -40,8 +81,6 @@ enum QuickOpenSearchService {
 
                 if content.contains(token) {
                     score += 16
-                } else if isSubsequence(token, in: content) {
-                    score += 8
                 }
             }
 
@@ -49,7 +88,7 @@ enum QuickOpenSearchService {
                 return nil
             }
 
-            return (note, score, recentOrder)
+            return (indexedNote.note, score, recentOrder)
         }
 
         return scored

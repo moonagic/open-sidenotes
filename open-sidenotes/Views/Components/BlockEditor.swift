@@ -7,6 +7,7 @@ struct BlockEditor: View {
     @State private var slashMenuPosition: CGPoint = .zero
     @State private var slashMenuQuery = ""
     @State private var slashMenuSelectedIndex = 0
+    @State private var selectedSlashCommand: SlashCommand?
     @State private var showLanguageSelector = false
     @State private var selectedLanguage: CodeLanguage?
 
@@ -77,6 +78,7 @@ struct BlockEditor: View {
                 slashMenuPosition: $slashMenuPosition,
                 slashMenuQuery: $slashMenuQuery,
                 slashMenuSelectedIndex: $slashMenuSelectedIndex,
+                selectedSlashCommand: $selectedSlashCommand,
                 selectedLanguage: $selectedLanguage,
                 showLanguageSelector: $showLanguageSelector
             )
@@ -166,12 +168,14 @@ struct BlockEditor: View {
 
     private func insertCommand(_ command: SlashCommand) {
         if command.needsLanguageSelector {
+            selectedSlashCommand = nil
             showSlashMenu = false
             withAnimation(.easeInOut(duration: 0.15)) {
                 showLanguageSelector = true
             }
         } else {
             showSlashMenu = false
+            selectedSlashCommand = command
         }
     }
 

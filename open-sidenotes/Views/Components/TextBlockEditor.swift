@@ -42,6 +42,7 @@ struct TextBlockEditor: NSViewRepresentable {
     @Binding var slashMenuPosition: CGPoint
     @Binding var slashMenuQuery: String
     @Binding var slashMenuSelectedIndex: Int
+    @Binding var selectedSlashCommand: SlashCommand?
     @Binding var selectedLanguage: CodeLanguage?
     @Binding var showLanguageSelector: Bool
 
@@ -102,6 +103,13 @@ struct TextBlockEditor: NSViewRepresentable {
 
         if textView.string != text && !context.coordinator.isUpdating {
             context.coordinator.renderMarkdown(in: textView, text: text)
+        }
+
+        if let command = selectedSlashCommand {
+            context.coordinator.insertSlashCommand(in: textView, command: command)
+            DispatchQueue.main.async {
+                self.selectedSlashCommand = nil
+            }
         }
 
         if let language = selectedLanguage, context.coordinator.lastSelectedLanguage != language {

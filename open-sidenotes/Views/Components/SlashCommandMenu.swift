@@ -4,17 +4,40 @@ struct SlashCommandMenu: View {
     let commands: [SlashCommand]
     let selectedIndex: Int
     let onSelect: (SlashCommand) -> Void
+    private let rowHeight: CGFloat = 56
+    private let maxMenuHeight: CGFloat = 300
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(commands.enumerated()), id: \.element.id) { index, command in
-                SlashCommandRow(
-                    command: command,
-                    isSelected: index == selectedIndex
-                )
-                .onTapGesture {
-                    onSelect(command)
+        let contentHeight = CGFloat(commands.count) * rowHeight
+        let menuHeight = min(maxMenuHeight, max(rowHeight, contentHeight))
+
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(commands.enumerated()), id: \.element.id) { index, command in
+                        Button(action: {
+                            onSelect(command)
+                        }) {
+                            SlashCommandRow(
+                                command: command,
+                                isSelected: index == selectedIndex
+                            )
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .id(command.id)
+                    }
                 }
+            }
+            .frame(height: menuHeight)
+            .onAppear {
+                scrollToSelectedCommand(with: proxy)
+            }
+            .onChange(of: selectedIndex) {
+                scrollToSelectedCommand(with: proxy)
+            }
+            .onChange(of: commands) {
+                scrollToSelectedCommand(with: proxy)
             }
         }
         .frame(width: 280)
@@ -25,6 +48,16 @@ struct SlashCommandMenu: View {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(Color(hex: "E8E8E8"), lineWidth: 1)
         )
+    }
+
+    private func scrollToSelectedCommand(with proxy: ScrollViewProxy) {
+        guard commands.indices.contains(selectedIndex) else { return }
+        let selectedID = commands[selectedIndex].id
+        DispatchQueue.main.async {
+            withAnimation(.easeOut(duration: 0.12)) {
+                proxy.scrollTo(selectedID, anchor: .center)
+            }
+        }
     }
 }
 
