@@ -56,6 +56,7 @@ struct ContentView: View {
     @State private var editingContent: String = ""
     @State private var saveTask: Task<Void, Never>?
     @State private var showDrawer: Bool = false
+    @State private var showChatDrawer: Bool = false
     @State private var isLoadingNote: Bool = false
 
     private var isEditing: Bool {
@@ -79,7 +80,7 @@ struct ContentView: View {
             let trimmed = editingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? "Untitled" : trimmed
         case .chat:
-            return "AI Workspace"
+            return chatService.currentSessionTitle
         }
     }
 
@@ -87,22 +88,28 @@ struct ContentView: View {
         ZStack(alignment: .leading) {
             Color(hex: "F4F5F1").ignoresSafeArea()
 
-            HStack(spacing: 10) {
-                WorkspaceSidebar(
+            VStack(spacing: 8) {
+                WorkspaceHeader(
                     mode: $mode,
-                    isDrawerOpen: showDrawer,
+                    metaTitle: modeMetaTitle,
                     onSelectMode: { selected in
                         withAnimation(.easeInOut(duration: 0.15)) {
                             mode = selected
                             if selected != .notes {
                                 showDrawer = false
                             }
+                            if selected != .chat {
+                                showChatDrawer = false
+                            }
                         }
                     },
-                    onToggleDrawer: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            mode = .notes
-                            showDrawer.toggle()
+                    onToggleSidebar: {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            if mode == .notes {
+                                showDrawer.toggle()
+                            } else {
+                                showChatDrawer.toggle()
+                            }
                         }
                     },
                     onPrimaryAction: {
@@ -117,85 +124,52 @@ struct ContentView: View {
                     }
                 )
 
-                VStack(spacing: 12) {
-                    WorkspaceHeader(
-                        mode: $mode,
-                        metaTitle: modeMetaTitle,
-                        onSelectMode: { selected in
-                            withAnimation(.easeInOut(duration: 0.15)) {
-                                mode = selected
-                                if selected != .notes {
-                                    showDrawer = false
-                                }
-                            }
-                        },
-                        onToggleDrawer: {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                mode = .notes
-                                showDrawer.toggle()
-                            }
-                        },
-                        onOpenSettings: {
-                            openSettings()
-                        },
-                        onAskAI: {
-                            askAIFromCurrentNote()
-                        }
-                    )
-                    .frame(height: 56)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(Color.white)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(Color(hex: "E3E7DF"), lineWidth: 1)
+                        )
+                        .shadow(color: Color.black.opacity(0.02), radius: 6, x: 0, y: 1)
 
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.white)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Color(hex: "E3E7DF"), lineWidth: 1)
+                    Group {
+                        if mode == .notes {
+                            NoteEditorView(
+                                noteStore: noteStore,
+                                selectedNote: $selectedNote,
+                                isEditing: .constant(isEditing),
+                                title: $editingTitle,
+                                content: $editingContent,
+                                onToggleDrawer: {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        showDrawer.toggle()
+                                    }
+                                },
+                                showMenuButton: false
                             )
-                            .shadow(color: Color.black.opacity(0.02), radius: 6, x: 0, y: 1)
-
-                        Group {
-                            if mode == .notes {
-                                NoteEditorView(
-                                    noteStore: noteStore,
-                                    selectedNote: $selectedNote,
-                                    isEditing: .constant(isEditing),
-                                    title: $editingTitle,
-                                    content: $editingContent,
-                                    onToggleDrawer: {
-                                        withAnimation(.easeInOut(duration: 0.2)) {
-                                            showDrawer.toggle()
-                                        }
-                                    },
-                                    showMenuButton: false
-                                )
-                            } else {
-                                ChatWorkspaceView(
-                                    chatService: chatService,
-                                    noteContext: currentNoteContext,
-                                    showHeader: false
-                                )
-                            }
+                        } else {
+                            ChatWorkspaceView(
+                                chatService: chatService,
+                                noteContext: currentNoteContext,
+                                showHeader: false,
+                                isSessionDrawerVisible: $showChatDrawer
+                            )
                         }
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
                     }
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
                 }
             }
-            .padding(10)
+            .padding(8)
 
             if showDrawer && mode == .notes {
                 NoteListDrawer(
                     noteStore: noteStore,
                     selectedNote: $selectedNote,
-                    onNewNote: {
-                        createNewNote()
-                    },
                     onClose: {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             showDrawer = false
                         }
-                    },
-                    onOpenSettings: {
-                        openSettings()
                     }
                 )
                 .transition(.move(edge: .leading).combined(with: .opacity))
@@ -210,6 +184,11 @@ struct ContentView: View {
             if newMode != .notes {
                 withAnimation(.easeInOut(duration: 0.15)) {
                     showDrawer = false
+                }
+            }
+            if newMode != .chat {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    showChatDrawer = false
                 }
             }
         }
@@ -234,24 +213,6 @@ struct ContentView: View {
 
     private func openSettings() {
         NotificationCenter.default.post(name: .openSettingsWindow, object: nil)
-    }
-
-    private func askAIFromCurrentNote() {
-        withAnimation(.easeInOut(duration: 0.15)) {
-            mode = .chat
-            showDrawer = false
-        }
-
-        chatService.startNewSession()
-
-        if let context = currentNoteContext {
-            chatService.inputText = "请基于当前笔记总结重点，并给出 3 个下一步建议。"
-            if context.content.count < 80 {
-                chatService.inputText = "请帮我把这条笔记扩展成更完整清晰的内容。"
-            }
-        } else {
-            chatService.inputText = "我想快速记录一个新想法，请先问我 3 个澄清问题。"
-        }
     }
 
     private func bootstrapNotes() async {
@@ -404,153 +365,76 @@ struct ContentView: View {
     }
 }
 
-private struct WorkspaceSidebar: View {
-    @Binding var mode: WorkspaceMode
-    let isDrawerOpen: Bool
-    let onSelectMode: (WorkspaceMode) -> Void
-    let onToggleDrawer: () -> Void
-    let onPrimaryAction: () -> Void
-    let onOpenSettings: () -> Void
-
-    var body: some View {
-        VStack(spacing: 8) {
-            VStack(spacing: 6) {
-                ForEach(WorkspaceMode.allCases) { item in
-                    SidebarIconButton(
-                        icon: item.icon,
-                        isActive: mode == item,
-                        tooltip: "\(item.title) (\(item.shortcut))",
-                        action: {
-                            onSelectMode(item)
-                        }
-                    )
-                }
-            }
-
-            Rectangle()
-                .fill(Color(hex: "E4E6DF"))
-                .frame(width: 22, height: 1)
-                .padding(.vertical, 2)
-
-            SidebarIconButton(
-                icon: "sidebar.left",
-                isActive: mode == .notes && isDrawerOpen,
-                tooltip: "Toggle notes drawer",
-                action: {
-                    onToggleDrawer()
-                }
-            )
-
-            Spacer(minLength: 4)
-
-            SidebarIconButton(
-                icon: mode == .notes ? "square.and.pencil" : "plus.bubble",
-                isActive: false,
-                tooltip: mode == .notes ? "New note (⌘N)" : "New chat (⌘N)",
-                action: {
-                    onPrimaryAction()
-                }
-            )
-
-            SidebarIconButton(
-                icon: "gearshape",
-                isActive: false,
-                tooltip: "Settings (⌘,)",
-                action: {
-                    onOpenSettings()
-                }
-            )
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 10)
-        .frame(width: 56)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color.white)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(Color(hex: "E3E7DF"), lineWidth: 1)
-                )
-                .shadow(color: Color.black.opacity(0.02), radius: 5, x: 0, y: 1)
-        )
-    }
-}
-
-private struct SidebarIconButton: View {
-    let icon: String
-    let isActive: Bool
-    let tooltip: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isActive ? Color(hex: "DCE8DD") : Color.clear)
-                    .frame(width: 34, height: 32)
-
-                Image(systemName: icon)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(isActive ? Color(hex: "3F5F4B") : Color(hex: "6A6F67"))
-            }
-        }
-        .buttonStyle(.plain)
-        .help(tooltip)
-    }
-}
-
 private struct WorkspaceHeader: View {
     @Binding var mode: WorkspaceMode
     let metaTitle: String
     let onSelectMode: (WorkspaceMode) -> Void
-    let onToggleDrawer: () -> Void
+    let onToggleSidebar: () -> Void
+    let onPrimaryAction: () -> Void
     let onOpenSettings: () -> Void
-    let onAskAI: (() -> Void)?
+
+    private var sidebarTooltip: String {
+        mode == .notes ? "Toggle notes drawer" : "Toggle chats drawer"
+    }
+
+    private var primaryActionLabel: String {
+        mode == .notes ? "New note" : "New chat"
+    }
+
+    private var primaryActionIcon: String {
+        mode == .notes ? "square.and.pencil" : "plus.bubble"
+    }
 
     var body: some View {
-        HStack(spacing: 10) {
-            HStack(spacing: 6) {
-                Image(systemName: mode.icon)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(Color(hex: "4B544E"))
-                Text(mode.title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Color(hex: "2A2F2B"))
-                Text(mode == .notes ? "· \(metaTitle)" : "")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(Color(hex: "8B918B"))
-                    .lineLimit(1)
-            }
+        VStack(spacing: 6) {
+            HStack(spacing: 8) {
+                HeaderIconButton(icon: "sidebar.left", tooltip: sidebarTooltip, action: onToggleSidebar)
 
-            Spacer(minLength: 0)
-
-            HStack(spacing: 6) {
                 WorkspaceModeSwitcher(mode: $mode, onSelectMode: onSelectMode)
 
-                if mode == .notes {
-                    if let onAskAI {
-                        HeaderIconButton(
-                            icon: "sparkles",
-                            tooltip: "Ask AI with current note",
-                            action: onAskAI
-                        )
-                    }
-                    HeaderIconButton(icon: "sidebar.left", tooltip: "Toggle notes drawer", action: onToggleDrawer)
-                }
+                Spacer(minLength: 0)
+
+                HeaderActionButton(label: primaryActionLabel, icon: primaryActionIcon, action: onPrimaryAction)
 
                 HeaderIconButton(icon: "gearshape", tooltip: "Settings", action: onOpenSettings)
             }
+
+            HStack(spacing: 6) {
+                Image(systemName: mode.icon)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(Color(hex: "6B716B"))
+
+                Text(metaTitle)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(Color(hex: "7B817B"))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.92)
+                    .truncationMode(.tail)
+                    .layoutPriority(1)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(Color(hex: "F6F8F4"))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7)
+                            .stroke(Color(hex: "E5E9E1"), lineWidth: 1)
+                    )
+            )
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.white)
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(hex: "FBFCFA"))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: 10)
                         .stroke(Color(hex: "E3E7DF"), lineWidth: 1)
                 )
-                .shadow(color: Color.black.opacity(0.02), radius: 5, x: 0, y: 1)
+                .shadow(color: Color.black.opacity(0.025), radius: 6, x: 0, y: 1)
         )
     }
 }
@@ -613,6 +497,28 @@ private struct HeaderIconButton: View {
         }
         .buttonStyle(.plain)
         .help(tooltip)
+    }
+}
+
+private struct HeaderActionButton: View {
+    let label: String
+    let icon: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(label, systemImage: icon)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(Color(hex: "4C5A51"))
+                .padding(.horizontal, 9)
+                .frame(height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(Color(hex: "EAF0E8"))
+                )
+        }
+        .buttonStyle(.plain)
+        .help("\(label) (⌘N)")
     }
 }
 

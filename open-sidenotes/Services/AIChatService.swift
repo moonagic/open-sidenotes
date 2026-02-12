@@ -13,6 +13,8 @@ struct ChatNoteContext {
 @MainActor
 final class AIChatSettings: ObservableObject {
     static let shared = AIChatSettings()
+    static let defaultModelName = "gpt-4o-mini"
+    static let defaultBaseURL = "https://api.openai.com/v1"
 
     @Published var apiKey: String {
         didSet {
@@ -23,7 +25,7 @@ final class AIChatSettings: ObservableObject {
     @Published var modelName: String {
         didSet {
             let trimmed = modelName.trimmingCharacters(in: .whitespacesAndNewlines)
-            let normalized = trimmed.isEmpty ? "gpt-4o-mini" : trimmed
+            let normalized = trimmed.isEmpty ? Self.defaultModelName : trimmed
 
             if modelName != normalized {
                 modelName = normalized
@@ -34,12 +36,33 @@ final class AIChatSettings: ObservableObject {
         }
     }
 
+    @Published var baseURL: String {
+        didSet {
+            let normalized = Self.normalizeBaseURL(baseURL)
+            if baseURL != normalized {
+                baseURL = normalized
+                return
+            }
+
+            UserDefaults.standard.set(normalized, forKey: baseURLKey)
+        }
+    }
+
     private let apiKeyKey = "openai_api_key"
     private let modelNameKey = "openai_model_name"
+    private let baseURLKey = "openai_base_url"
 
     private init() {
         self.apiKey = UserDefaults.standard.string(forKey: apiKeyKey) ?? ""
-        self.modelName = UserDefaults.standard.string(forKey: modelNameKey) ?? "gpt-4o-mini"
+        self.modelName = UserDefaults.standard.string(forKey: modelNameKey) ?? Self.defaultModelName
+        self.baseURL = Self.normalizeBaseURL(UserDefaults.standard.string(forKey: baseURLKey) ?? Self.defaultBaseURL)
+    }
+
+    private static func normalizeBaseURL(_ rawValue: String) -> String {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return defaultBaseURL }
+        let normalized = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return normalized.isEmpty ? defaultBaseURL : normalized
     }
 }
 
@@ -199,7 +222,7 @@ final class AIChatService: ObservableObject {
     }
 
     private func requestCompletion(apiKey: String, noteContext: ChatNoteContext?, historyMessages: [ChatMessage]) async throws -> String {
-        guard let url = URL(string: "https://api.openai.com/v1/chat/completions") else {
+        guard let url = chatCompletionsURL(from: settings.baseURL) else {
             throw AIChatServiceError.invalidURL
         }
 
@@ -250,6 +273,26 @@ final class AIChatService: ObservableObject {
         }
 
         return content
+    }
+
+    private func chatCompletionsURL(from baseURL: String) -> URL? {
+        let raw = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return nil }
+        guard let rootURL = URL(string: raw) else { return nil }
+
+        let normalizedPath = rootURL.path
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            .lowercased()
+
+        if normalizedPath.hasSuffix("chat/completions") {
+            return rootURL
+        }
+
+        if normalizedPath.hasSuffix("v1") {
+            return rootURL.appendingPathComponent("chat/completions")
+        }
+
+        return rootURL.appendingPathComponent("v1/chat/completions")
     }
 
     private func bootstrapSessions() {
@@ -458,7 +501,7 @@ enum AIChatServiceError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidURL:
-            return "AI 服务地址无效。"
+            return "AI 服务 Base URL 无效，请在 Settings 检查配置。"
         case .invalidResponse:
             return "AI 服务返回异常。"
         case .emptyResponse:

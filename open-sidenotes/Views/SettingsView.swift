@@ -205,7 +205,7 @@ struct SettingsView: View {
 
                     SettingsCard(
                         title: "AI Chat",
-                        subtitle: "Model and API key"
+                        subtitle: "Model, base URL and API key"
                     ) {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Model")
@@ -213,6 +213,26 @@ struct SettingsView: View {
                                 .foregroundColor(Color(hex: "5C645E"))
 
                             TextField("gpt-4o-mini", text: $aiChatSettings.modelName)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 13))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 9)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 9)
+                                        .fill(Color(hex: "F3F6F1"))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 9)
+                                                .stroke(Color(hex: "E1E7DE"), lineWidth: 1)
+                                        )
+                                )
+                        }
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Base URL")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(Color(hex: "5C645E"))
+
+                            TextField(AIChatSettings.defaultBaseURL, text: $aiChatSettings.baseURL)
                                 .textFieldStyle(.plain)
                                 .font(.system(size: 13))
                                 .padding(.horizontal, 10)
@@ -247,6 +267,7 @@ struct SettingsView: View {
                                 )
                         }
 
+                        sectionHint("Base URL supports custom OpenAI-compatible endpoints")
                         sectionHint("API key is stored locally in UserDefaults")
                     }
 

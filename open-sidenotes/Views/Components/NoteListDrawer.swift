@@ -3,9 +3,7 @@ import SwiftUI
 struct NoteListDrawer: View {
     @ObservedObject var noteStore: NoteStore
     @Binding var selectedNote: Note?
-    var onNewNote: () -> Void
     var onClose: () -> Void
-    var onOpenSettings: () -> Void
 
     @State private var hoveredNoteId: UUID?
     @State private var searchText: String = ""
@@ -41,13 +39,13 @@ struct NoteListDrawer: View {
                 .frame(width: 332)
                 .frame(maxHeight: .infinity)
                 .background(
-                    RoundedRectangle(cornerRadius: 24)
-                        .fill(Color.white.opacity(0.95))
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(Color(hex: "FCFDFC"))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 24)
-                                .stroke(Color.white.opacity(0.75), lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(Color(hex: "E6EAE3"), lineWidth: 1)
                         )
-                        .shadow(color: Color.black.opacity(0.12), radius: 26, x: 8, y: 0)
+                        .shadow(color: Color.black.opacity(0.09), radius: 20, x: 6, y: 0)
                 )
                 .padding(.leading, 12)
                 .padding(.vertical, 12)
@@ -66,7 +64,7 @@ struct NoteListDrawer: View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Notes Library")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(Color(hex: "242824"))
 
                 Text("\(noteStore.notes.count) note\(noteStore.notes.count == 1 ? "" : "s")")
@@ -76,24 +74,12 @@ struct NoteListDrawer: View {
 
             Spacer(minLength: 10)
 
-            HStack(spacing: 6) {
-                DrawerIconButton(icon: "square.and.pencil", tooltip: "New Note") {
-                    onNewNote()
-                    onClose()
-                }
-
-                DrawerIconButton(icon: "gearshape", tooltip: "Settings") {
-                    onOpenSettings()
-                    onClose()
-                }
-
-                DrawerIconButton(icon: "xmark", tooltip: "Close") {
-                    onClose()
-                }
+            DrawerIconButton(icon: "xmark", tooltip: "Close") {
+                onClose()
             }
         }
         .padding(.horizontal, 16)
-        .padding(.top, 14)
+        .padding(.top, 13)
         .padding(.bottom, 12)
     }
 
@@ -229,7 +215,7 @@ struct NoteListDrawer: View {
         )
         .background(Color(hex: "FCFDFC"))
         .clipShape(
-            RoundedRectangle(cornerRadius: 24)
+            RoundedRectangle(cornerRadius: 20)
         )
     }
 
@@ -269,7 +255,7 @@ private struct DrawerIconButton: View {
                 .frame(width: 30, height: 30)
                 .background(
                     RoundedRectangle(cornerRadius: 9)
-                        .fill(Color(hex: "EFF3ED"))
+                        .fill(Color(hex: "F1F5EF"))
                 )
         }
         .buttonStyle(.plain)
@@ -405,9 +391,7 @@ private struct DrawerNoteListItemCard: View {
     return NoteListDrawer(
         noteStore: noteStore,
         selectedNote: $selectedNote,
-        onNewNote: {},
-        onClose: {},
-        onOpenSettings: {}
+        onClose: {}
     )
     .frame(width: 900, height: 600)
 }

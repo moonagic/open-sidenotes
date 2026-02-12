@@ -1,20 +1,23 @@
 import SwiftUI
+import AppKit
 
 struct ChatWorkspaceView: View {
     @ObservedObject var chatService: AIChatService
     let noteContext: ChatNoteContext?
     var showHeader: Bool = true
+    @Binding var isSessionDrawerVisible: Bool
 
     @AppStorage("ai_chat_include_note_context") private var includeNoteContext = true
-    @FocusState private var isInputFocused: Bool
+    @State private var isInputFocused: Bool = false
 
     @State private var editingSessionId: UUID?
     @State private var editingSessionTitle: String = ""
     @State private var sessionSearchText: String = ""
     @State private var hoveredSessionId: UUID?
-    @State private var isSessionDrawerVisible: Bool = false
+    @State private var inputFocusTrigger: Int = 0
+    @State private var inputHeight: CGFloat = 20
 
-    private let drawerWidth: CGFloat = 220
+    private let drawerWidth: CGFloat = 208
     private let narrowWidthThreshold: CGFloat = 760
 
     private var effectiveContext: ChatNoteContext? {
@@ -84,13 +87,14 @@ struct ChatWorkspaceView: View {
             .background(Color.white)
             .onAppear {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    isInputFocused = true
+                    inputFocusTrigger += 1
                 }
             }
             .onChange(of: chatService.currentSessionId) {
                 editingSessionId = nil
                 editingSessionTitle = ""
                 isSessionDrawerVisible = false
+                inputFocusTrigger += 1
             }
             .onChange(of: geometry.size.width) { _, newWidth in
                 if newWidth >= narrowWidthThreshold {
@@ -102,7 +106,9 @@ struct ChatWorkspaceView: View {
 
     private func conversationPanel(isNarrowLayout: Bool, bubbleMaxWidth: CGFloat) -> some View {
         VStack(spacing: 0) {
-            conversationTopBar(isNarrowLayout: isNarrowLayout)
+            if showHeader || noteContext != nil {
+                conversationTopBar(isNarrowLayout: isNarrowLayout)
+            }
 
             if shouldShowPromptShortcuts {
                 quickPromptSection(isNarrowLayout: isNarrowLayout)
@@ -110,7 +116,7 @@ struct ChatWorkspaceView: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(spacing: 12) {
+                    LazyVStack(spacing: 10) {
                         ForEach(chatService.messages) { message in
                             ChatMessageBubble(
                                 message: message,
@@ -124,17 +130,18 @@ struct ChatWorkspaceView: View {
                                 ProgressView()
                                     .scaleEffect(0.85)
                                 Text("AI 正在思考...")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(Color(hex: "7A7A7A"))
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(Color(hex: "6D756F"))
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 16)
+                            .padding(.top, 4)
                         }
                     }
-                    .padding(.horizontal, isNarrowLayout ? 12 : 16)
-                    .padding(.vertical, 14)
+                    .padding(.horizontal, isNarrowLayout ? 12 : 18)
+                    .padding(.vertical, 16)
                 }
-                .background(Color(hex: "FBFBFB"))
+                .background(Color(hex: "F7F9F6"))
                 .onChange(of: chatService.messages.count) {
                     if let last = chatService.messages.last {
                         withAnimation(.easeOut(duration: 0.2)) {
@@ -154,111 +161,66 @@ struct ChatWorkspaceView: View {
 
     private func conversationTopBar(isNarrowLayout: Bool) -> some View {
         VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                Button(action: {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        isSessionDrawerVisible.toggle()
-                    }
-                }) {
-                    HStack(spacing: 5) {
-                        Image(systemName: "sidebar.left")
-                            .font(.system(size: 12, weight: .semibold))
-
-                        if !isNarrowLayout {
-                            Text("Chats")
-                                .font(.system(size: 11, weight: .semibold))
-                        }
-                    }
-                    .foregroundColor(Color(hex: "5F6A62"))
-                    .padding(.horizontal, isNarrowLayout ? 8 : 10)
-                    .frame(height: 28)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(hex: "EEF2EC"))
-                    )
-                }
-                .buttonStyle(.plain)
-                .help("Show chats")
-
-                if showHeader {
+            if showHeader {
+                HStack(spacing: 6) {
                     Text("AI Chat")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(Color(hex: "546058"))
+                        .foregroundColor(Color(hex: "657067"))
+
+                    Text(chatService.currentSessionTitle)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(Color(hex: "2E342F"))
+                        .lineLimit(1)
+
+                    Spacer(minLength: 0)
                 }
-
-                Text(chatService.currentSessionTitle)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(Color(hex: "2E342F"))
-                    .lineLimit(1)
-
-                Spacer(minLength: 0)
-
-                Button(action: {
-                    chatService.startNewSession()
-                }) {
-                    if isNarrowLayout {
-                        Image(systemName: "plus")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(Color(hex: "5F6A62"))
-                            .frame(width: 28, height: 28)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color(hex: "EEF2EC"))
-                            )
-                    } else {
-                        Label("New chat", systemImage: "plus")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(Color(hex: "5F6A62"))
-                            .padding(.horizontal, 10)
-                            .frame(height: 28)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color(hex: "EEF2EC"))
-                            )
-                    }
-                }
-                .buttonStyle(.plain)
-                .help("New chat")
             }
 
             if let context = noteContext {
-                HStack(spacing: 8) {
+                HStack(spacing: 10) {
                     Image(systemName: includeNoteContext ? "link.circle.fill" : "link.circle")
-                        .font(.system(size: 13))
-                        .foregroundColor(Color(hex: includeNoteContext ? "7C9885" : "A5A5A5"))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(Color(hex: includeNoteContext ? "5D7A66" : "9AA39C"))
+                        .frame(width: 30, height: 30)
+                        .background(
+                            Circle()
+                                .fill(Color(hex: includeNoteContext ? "EAF2EA" : "EFF2EF"))
+                        )
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text("当前笔记上下文")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(Color(hex: "5B635D"))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(Color(hex: "505852"))
 
                         Text(context.title)
-                            .font(.system(size: 10))
-                            .foregroundColor(Color(hex: "8A8A8A"))
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(Color(hex: "7F867F"))
                             .lineLimit(1)
                     }
 
                     Spacer(minLength: 0)
 
-                    Button(includeNoteContext ? "ON" : "OFF") {
-                        includeNoteContext.toggle()
-                    }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(includeNoteContext ? Color(hex: "7C9885") : Color(hex: "A0A0A0"))
+                    Toggle("Use note context", isOn: $includeNoteContext)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .tint(Color(hex: "6F8D79"))
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 10)
                 .background(
-                    RoundedRectangle(cornerRadius: 9)
-                        .fill(Color(hex: "F4F7F4"))
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.white)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color(hex: "E4E9E2"), lineWidth: 1)
+                        )
                 )
             }
         }
         .padding(.horizontal, isNarrowLayout ? 10 : 14)
-        .padding(.top, isNarrowLayout ? 8 : 10)
+        .padding(.top, isNarrowLayout ? 8 : 9)
         .padding(.bottom, 10)
-        .background(Color(hex: "FCFDFC"))
+        .background(Color(hex: "F9FBF8"))
         .overlay(
             Rectangle()
                 .fill(Color(hex: "E8ECE6"))
@@ -269,11 +231,17 @@ struct ChatWorkspaceView: View {
 
     private func quickPromptSection(isNarrowLayout: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Quick prompts")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(Color(hex: "7C837D"))
-                .padding(.horizontal, isNarrowLayout ? 12 : 16)
-                .padding(.top, 10)
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(Color(hex: "728275"))
+
+                Text("Quick prompts")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(Color(hex: "6E766F"))
+            }
+            .padding(.horizontal, isNarrowLayout ? 12 : 16)
+            .padding(.top, 10)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -283,16 +251,16 @@ struct ChatWorkspaceView: View {
                         }) {
                             Text(prompt)
                                 .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(Color(hex: "566257"))
+                                .foregroundColor(Color(hex: "4E5A51"))
                                 .lineLimit(1)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 7)
+                                .padding(.horizontal, 11)
+                                .padding(.vertical, 8)
                                 .background(
                                     Capsule()
-                                        .fill(Color(hex: "EEF3EE"))
+                                        .fill(Color.white)
                                         .overlay(
                                             Capsule()
-                                                .stroke(Color(hex: "DDE5DD"), lineWidth: 1)
+                                                .stroke(Color(hex: "DEE6DE"), lineWidth: 1)
                                         )
                                 )
                         }
@@ -303,7 +271,7 @@ struct ChatWorkspaceView: View {
                 .padding(.bottom, 10)
             }
         }
-        .background(Color(hex: "FCFDFC"))
+        .background(Color(hex: "F9FBF8"))
         .overlay(
             Rectangle()
                 .fill(Color(hex: "E8EDE8"))
@@ -313,69 +281,87 @@ struct ChatWorkspaceView: View {
     }
 
     private func composerSection(isNarrowLayout: Bool) -> some View {
-        VStack(spacing: 8) {
+        let minInputHeight: CGFloat = 20
+        let maxInputHeight: CGFloat = isNarrowLayout ? 108 : 124
+
+        return VStack(spacing: 10) {
             if let error = chatService.errorMessage, !error.isEmpty {
                 HStack {
                     Text(error)
-                        .font(.system(size: 11))
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundColor(Color(hex: "D95F5F"))
                     Spacer()
                 }
                 .padding(.horizontal, isNarrowLayout ? 12 : 16)
             }
 
-            HStack(alignment: .bottom, spacing: 8) {
-                TextEditor(text: $chatService.inputText)
-                    .font(.system(size: 14))
-                    .focused($isInputFocused)
-                    .frame(minHeight: 56, maxHeight: 110)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(Color.white)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(hex: "DCDCDC"), lineWidth: 1)
-                    )
-                    .disabled(chatService.isSending)
-
+            ZStack(alignment: .trailing) {
+                AutoGrowingInputTextView(
+                    text: $chatService.inputText,
+                    dynamicHeight: $inputHeight,
+                    isFocused: $isInputFocused,
+                    focusTrigger: inputFocusTrigger,
+                    isEditable: !chatService.isSending,
+                    minHeight: minInputHeight,
+                    maxHeight: maxInputHeight
+                )
+                .frame(height: inputHeight)
+                .padding(.leading, 12)
+                .padding(.trailing, 44)
+                .padding(.vertical, 9)
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(Color.white)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(
+                                    Color(hex: isInputFocused ? "B9C8BA" : "D8DFD8"),
+                                    lineWidth: isInputFocused ? 1.25 : 1
+                                )
+                        )
+                )
                 Button(action: {
                     sendMessage()
                 }) {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 13, weight: .bold))
                         .foregroundColor(.white)
-                        .frame(width: 34, height: 34)
-                        .background(Circle().fill(Color(hex: "7C9885")))
+                        .frame(width: 30, height: 30)
+                        .background(
+                            Circle()
+                                .fill(canSend ? Color(hex: "6F8D79") : Color(hex: "B7C2B9"))
+                        )
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.return, modifiers: [.command])
                 .disabled(!canSend)
+                .padding(.trailing, 10)
             }
             .padding(.horizontal, isNarrowLayout ? 12 : 16)
 
             HStack {
                 if includeNoteContext, let context = effectiveContext {
-                    Text(isNarrowLayout ? "Context: On" : "Context: \(context.summary)")
+                    Text(isNarrowLayout ? "Context on" : "Context: \(context.summary)")
                         .lineLimit(1)
                         .font(.system(size: 11))
-                        .foregroundColor(Color(hex: "8C8C8C"))
+                        .foregroundColor(Color(hex: "7F8680"))
                 } else {
-                    Text("Context: Off")
+                    Text(noteContext == nil ? "No note context" : "Context off")
                         .font(.system(size: 11))
-                        .foregroundColor(Color(hex: "A0A0A0"))
+                        .foregroundColor(Color(hex: "9AA19A"))
                 }
 
                 Spacer()
 
-                Text("Send: ⌘↩")
+                Text("⌘↩ Send")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(Color(hex: "9A9A9A"))
+                    .foregroundColor(Color(hex: "8F9791"))
             }
             .padding(.horizontal, isNarrowLayout ? 12 : 16)
             .padding(.bottom, 12)
         }
         .padding(.top, 10)
-        .background(Color(hex: "FAFAFA"))
+        .background(Color(hex: "F9FBF8"))
     }
 
     private func sessionDrawer(isNarrowLayout: Bool) -> some View {
@@ -647,7 +633,7 @@ struct ChatWorkspaceView: View {
     private func applyQuickPrompt(_ prompt: String) {
         chatService.inputText = prompt
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            isInputFocused = true
+            inputFocusTrigger += 1
         }
     }
 
@@ -658,45 +644,217 @@ struct ChatWorkspaceView: View {
     }
 }
 
+private struct AutoGrowingInputTextView: NSViewRepresentable {
+    @Binding var text: String
+    @Binding var dynamicHeight: CGFloat
+    @Binding var isFocused: Bool
+
+    let focusTrigger: Int
+    let isEditable: Bool
+    let minHeight: CGFloat
+    let maxHeight: CGFloat
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.borderType = .noBorder
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = false
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+        scrollView.scrollerStyle = .overlay
+
+        let textView = NSTextView()
+        textView.isRichText = false
+        textView.importsGraphics = false
+        textView.font = .systemFont(ofSize: 14)
+        textView.textColor = NSColor.labelColor
+        textView.backgroundColor = .clear
+        textView.drawsBackground = false
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainerInset = NSSize(width: 0, height: 0)
+        textView.delegate = context.coordinator
+        textView.string = text
+
+        if let textContainer = textView.textContainer {
+            textContainer.widthTracksTextView = true
+            textContainer.heightTracksTextView = false
+            textContainer.lineFragmentPadding = 0
+            textContainer.containerSize = NSSize(
+                width: scrollView.contentSize.width,
+                height: CGFloat.greatestFiniteMagnitude
+            )
+        }
+
+        scrollView.documentView = textView
+
+        DispatchQueue.main.async {
+            context.coordinator.recalculateHeight(for: textView)
+        }
+
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        context.coordinator.parent = self
+
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+
+        textView.isEditable = isEditable
+        textView.isSelectable = isEditable
+
+        if textView.string != text {
+            textView.string = text
+        }
+
+        if let textContainer = textView.textContainer {
+            textContainer.containerSize = NSSize(
+                width: max(0, scrollView.contentSize.width),
+                height: CGFloat.greatestFiniteMagnitude
+            )
+        }
+
+        DispatchQueue.main.async {
+            context.coordinator.recalculateHeight(for: textView)
+        }
+
+        if focusTrigger != context.coordinator.lastAppliedFocusTrigger {
+            context.coordinator.lastAppliedFocusTrigger = focusTrigger
+            DispatchQueue.main.async {
+                guard isEditable, let window = textView.window else { return }
+                window.makeFirstResponder(textView)
+            }
+        }
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: AutoGrowingInputTextView
+        var lastAppliedFocusTrigger: Int = 0
+
+        init(_ parent: AutoGrowingInputTextView) {
+            self.parent = parent
+        }
+
+        func textDidChange(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+
+            let newValue = textView.string
+            if parent.text != newValue {
+                parent.text = newValue
+            }
+
+            recalculateHeight(for: textView)
+        }
+
+        func textDidBeginEditing(_ notification: Notification) {
+            if !parent.isFocused {
+                parent.isFocused = true
+            }
+        }
+
+        func textDidEndEditing(_ notification: Notification) {
+            if parent.isFocused {
+                parent.isFocused = false
+            }
+        }
+
+        func recalculateHeight(for textView: NSTextView) {
+            guard let layoutManager = textView.layoutManager,
+                  let textContainer = textView.textContainer else { return }
+
+            layoutManager.ensureLayout(for: textContainer)
+            let usedHeight = layoutManager.usedRect(for: textContainer).height
+            let lineHeight = layoutManager.defaultLineHeight(for: textView.font ?? .systemFont(ofSize: 14))
+            let measured = max(lineHeight, ceil(usedHeight))
+            let clamped = min(max(parent.minHeight, measured), parent.maxHeight)
+
+            if abs(parent.dynamicHeight - clamped) > 0.5 {
+                parent.dynamicHeight = clamped
+            }
+        }
+    }
+}
+
 private struct ChatMessageBubble: View {
     let message: ChatMessage
     let maxBubbleWidth: CGFloat
+    private var isAssistant: Bool { message.role == .assistant }
 
     var body: some View {
-        HStack {
-            if message.role == .assistant {
-                bubble
-                    .frame(maxWidth: maxBubbleWidth, alignment: .leading)
+        VStack(alignment: isAssistant ? .leading : .trailing, spacing: 4) {
+            if isAssistant {
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(Color(hex: "7A897D"))
+                        .frame(width: 5, height: 5)
 
-                Spacer(minLength: 12)
-            } else {
-                Spacer(minLength: 12)
-
-                bubble
-                    .frame(maxWidth: maxBubbleWidth, alignment: .leading)
+                    Text("AI")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(Color(hex: "6A756D"))
+                }
+                .padding(.leading, 4)
             }
+
+            HStack {
+                if isAssistant {
+                    bubble
+                        .frame(maxWidth: maxBubbleWidth, alignment: .leading)
+
+                    Spacer(minLength: 16)
+                } else {
+                    Spacer(minLength: 16)
+
+                    bubble
+                        .frame(maxWidth: maxBubbleWidth, alignment: .trailing)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: isAssistant ? .leading : .trailing)
         }
-        .frame(maxWidth: .infinity, alignment: message.role == .assistant ? .leading : .trailing)
     }
 
     private var bubble: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(message.role == .assistant ? "AI" : "You")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(message.role == .assistant ? Color(hex: "6C7A70") : Color.white.opacity(0.85))
-
+        VStack(alignment: .leading, spacing: 5) {
             Text(message.content)
                 .font(.system(size: 14))
-                .foregroundColor(message.role == .assistant ? Color(hex: "2C2C2C") : .white)
+                .foregroundColor(isAssistant ? Color(hex: "2C342D") : .white)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 13)
+        .padding(.vertical, 11)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(message.role == .assistant ? Color(hex: "EEF3EF") : Color(hex: "7C9885"))
+            RoundedRectangle(cornerRadius: 14)
+                .fill(bubbleFillStyle)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(isAssistant ? Color(hex: "DEE5DE") : Color.clear, lineWidth: 1)
+                )
+        )
+        .shadow(
+            color: Color.black.opacity(isAssistant ? 0.04 : 0.08),
+            radius: isAssistant ? 2 : 4,
+            x: 0,
+            y: 1
+        )
+    }
+
+    private var bubbleFillStyle: AnyShapeStyle {
+        if isAssistant {
+            return AnyShapeStyle(Color.white)
+        }
+
+        return AnyShapeStyle(
+            LinearGradient(
+                colors: [Color(hex: "7B9885"), Color(hex: "6E8B79")],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
         )
     }
 }
