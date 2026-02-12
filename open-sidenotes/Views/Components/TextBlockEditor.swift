@@ -232,7 +232,8 @@ struct TextBlockEditor: NSViewRepresentable {
                         let rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
 
                         if let window = textView.window {
-                            let textViewPoint = CGPoint(x: rect.minX, y: rect.maxY + 4)
+                            // Anchor slash menu to the caret line's top edge.
+                            let textViewPoint = CGPoint(x: rect.minX, y: rect.minY)
                             let windowPoint = textView.convert(textViewPoint, to: nil)
                             let screenPoint = window.convertPoint(toScreen: windowPoint)
                             parent.slashMenuPosition = screenPoint

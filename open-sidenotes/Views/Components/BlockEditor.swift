@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct BlockEditor: View {
     @Binding var content: String
@@ -24,16 +25,19 @@ struct BlockEditor: View {
             }
 
             if showSlashMenu {
-                SlashCommandMenu(
-                    commands: SlashCommand.filter(by: slashMenuQuery),
-                    selectedIndex: slashMenuSelectedIndex,
-                    onSelect: { command in
-                        insertCommand(command)
-                    }
-                )
-                .padding(.leading, 48)
-                .padding(.top, 72)
-                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                GeometryReader { geometry in
+                    let menuOrigin = slashMenuOrigin(in: geometry.size)
+
+                    SlashCommandMenu(
+                        commands: SlashCommand.filter(by: slashMenuQuery),
+                        selectedIndex: slashMenuSelectedIndex,
+                        onSelect: { command in
+                            insertCommand(command)
+                        }
+                    )
+                    .offset(x: menuOrigin.x, y: menuOrigin.y)
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                }
             }
 
             if showLanguageSelector {
@@ -184,5 +188,36 @@ struct BlockEditor: View {
             showLanguageSelector = false
         }
         selectedLanguage = language
+    }
+
+    private func slashMenuOrigin(in containerSize: CGSize) -> CGPoint {
+        let fallback = CGPoint(x: 48, y: 72)
+        guard let window = NSApp.keyWindow else { return fallback }
+
+        let menuWidth: CGFloat = 280
+        let menuHeight = estimatedSlashMenuHeight()
+        let margin: CGFloat = 10
+
+        let screenPoint = NSPoint(x: slashMenuPosition.x, y: slashMenuPosition.y)
+        let windowPoint = window.convertPoint(fromScreen: screenPoint)
+
+        // windowPoint is bottom-left based; SwiftUI offset is top-left based.
+        let rawX = windowPoint.x
+        let rawY = containerSize.height - windowPoint.y
+
+        let maxX = max(margin, containerSize.width - menuWidth - margin)
+        let maxY = max(margin, containerSize.height - menuHeight - margin)
+
+        let clampedX = min(max(margin, rawX), maxX)
+        let clampedY = min(max(margin, rawY), maxY)
+
+        return CGPoint(x: clampedX, y: clampedY)
+    }
+
+    private func estimatedSlashMenuHeight() -> CGFloat {
+        let rowHeight: CGFloat = 56
+        let maxHeight: CGFloat = 300
+        let rowCount = max(1, SlashCommand.filter(by: slashMenuQuery).count)
+        return min(maxHeight, CGFloat(rowCount) * rowHeight)
     }
 }
