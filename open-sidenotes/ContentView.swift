@@ -58,6 +58,8 @@ struct ContentView: View {
     @State private var showDrawer: Bool = false
     @State private var showChatDrawer: Bool = false
     @State private var isLoadingNote: Bool = false
+    @State private var showQuickOpen: Bool = false
+    @State private var recentNoteIDs: [UUID] = RecentNotesManager.shared.recentNoteIDs()
 
     private var isEditing: Bool {
         editingNoteId != nil
@@ -153,7 +155,10 @@ struct ContentView: View {
                                 chatService: chatService,
                                 noteContext: currentNoteContext,
                                 showHeader: false,
-                                isSessionDrawerVisible: $showChatDrawer
+                                isSessionDrawerVisible: $showChatDrawer,
+                                onSaveMessageAsNote: { message in
+                                    saveChatMessageAsNote(message)
+                                }
                             )
                         }
                     }
@@ -175,9 +180,27 @@ struct ContentView: View {
                 .transition(.move(edge: .leading).combined(with: .opacity))
                 .zIndex(3)
             }
+
+            if showQuickOpen {
+                QuickOpenOverlay(
+                    notes: noteStore.notes,
+                    recentNoteIDs: recentNoteIDs,
+                    onSelect: { note in
+                        openNoteFromQuickOpen(note)
+                    },
+                    onDismiss: {
+                        withAnimation(.easeInOut(duration: 0.12)) {
+                            showQuickOpen = false
+                        }
+                    }
+                )
+                .transition(.opacity)
+                .zIndex(6)
+            }
         }
         .onAppear {
             restoreWorkspaceMode()
+            refreshRecentNotes()
         }
         .onChange(of: mode) { newMode in
             workspaceModeRawValue = newMode.rawValue
@@ -194,6 +217,9 @@ struct ContentView: View {
         }
         .onChange(of: selectedNote) { newNote in
             handleNoteSelection(newNote)
+        }
+        .onChange(of: noteStore.notes) { _ in
+            refreshRecentNotes()
         }
         .onChange(of: editingTitle) { _ in
             if !isLoadingNote {
@@ -265,6 +291,8 @@ struct ContentView: View {
         editingTitle = note.title
         editingContent = note.content
         LastOpenedNoteManager.shared.saveLastOpenedNote(note.id)
+        RecentNotesManager.shared.record(noteID: note.id)
+        refreshRecentNotes()
 
         DispatchQueue.main.async {
             isLoadingNote = false
@@ -324,6 +352,119 @@ struct ContentView: View {
         }
     }
 
+    private func toggleQuickOpen() {
+        withAnimation(.easeInOut(duration: 0.12)) {
+            showQuickOpen.toggle()
+        }
+
+        if showQuickOpen {
+            showDrawer = false
+            showChatDrawer = false
+        }
+    }
+
+    private func openNoteFromQuickOpen(_ note: Note) {
+        withAnimation(.easeInOut(duration: 0.12)) {
+            showQuickOpen = false
+            showDrawer = false
+            showChatDrawer = false
+        }
+        mode = .notes
+        selectedNote = note
+    }
+
+    private func openOrCreateTodayNote() {
+        let now = Date()
+        let title = todayNoteTitle(from: now)
+
+        if let existing = findNote(byTitle: title) {
+            openNoteFromQuickOpen(existing)
+            return
+        }
+
+        saveTask?.cancel()
+        if let currentId = editingNoteId {
+            saveCurrentNote(id: currentId, title: editingTitle, content: editingContent)
+        }
+
+        Task {
+            let note = await noteStore.addNote(
+                title: title,
+                content: todayNoteTemplate(from: now)
+            )
+            await MainActor.run {
+                openNoteFromQuickOpen(note)
+            }
+        }
+    }
+
+    private func saveChatMessageAsNote(_ message: String) {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let title = noteTitleFromChatMessage(trimmed)
+
+        Task {
+            let note = await noteStore.addNote(title: title, content: trimmed)
+            await MainActor.run {
+                openNoteFromQuickOpen(note)
+            }
+        }
+    }
+
+    private func refreshRecentNotes() {
+        let existingIDs = Set(noteStore.notes.map(\.id))
+        recentNoteIDs = RecentNotesManager.shared.recentNoteIDs().filter { existingIDs.contains($0) }
+    }
+
+    private func findNote(byTitle title: String) -> Note? {
+        let normalizedTarget = normalizeTitle(title)
+        return noteStore.notes.first { normalizeTitle($0.title) == normalizedTarget }
+    }
+
+    private func normalizeTitle(_ raw: String) -> String {
+        raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func todayNoteTitle(from date: Date) -> String {
+        "Daily \(Self.dailyNoteDateFormatter.string(from: date))"
+    }
+
+    private func todayNoteTemplate(from date: Date) -> String {
+        let formattedDate = Self.dailyNoteDateFormatter.string(from: date)
+        return """
+        # Daily Note \(formattedDate)
+
+        ## Priorities
+        - [ ] 
+
+        ## Notes
+        - 
+
+        ## Follow-ups
+        - [ ] 
+        """
+    }
+
+    private func noteTitleFromChatMessage(_ message: String) -> String {
+        let firstLine = message
+            .components(separatedBy: .newlines)
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        if !firstLine.isEmpty {
+            return String(firstLine.prefix(48))
+        }
+
+        return "Saved Chat \(Self.dailyNoteDateFormatter.string(from: Date()))"
+    }
+
+    private static let dailyNoteDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
     private func restoreWorkspaceMode() {
         mode = WorkspaceMode(rawValue: workspaceModeRawValue) ?? .notes
     }
@@ -360,6 +501,18 @@ struct ContentView: View {
                 openSettings()
             }
             .keyboardShortcut(",", modifiers: .command)
+            .hidden()
+
+            Button("") {
+                toggleQuickOpen()
+            }
+            .keyboardShortcut("j", modifiers: .command)
+            .hidden()
+
+            Button("") {
+                openOrCreateTodayNote()
+            }
+            .keyboardShortcut("d", modifiers: .command)
             .hidden()
         }
     }

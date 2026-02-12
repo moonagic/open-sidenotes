@@ -6,6 +6,7 @@ struct ChatWorkspaceView: View {
     let noteContext: ChatNoteContext?
     var showHeader: Bool = true
     @Binding var isSessionDrawerVisible: Bool
+    var onSaveMessageAsNote: ((String) -> Void)? = nil
 
     @AppStorage("ai_chat_include_note_context") private var includeNoteContext = true
     @State private var isInputFocused: Bool = false
@@ -120,7 +121,8 @@ struct ChatWorkspaceView: View {
                         ForEach(chatService.messages) { message in
                             ChatMessageBubble(
                                 message: message,
-                                maxBubbleWidth: bubbleMaxWidth
+                                maxBubbleWidth: bubbleMaxWidth,
+                                onSaveAsNote: onSaveMessageAsNote
                             )
                             .id(message.id)
                         }
@@ -783,7 +785,12 @@ private struct AutoGrowingInputTextView: NSViewRepresentable {
 private struct ChatMessageBubble: View {
     let message: ChatMessage
     let maxBubbleWidth: CGFloat
+    var onSaveAsNote: ((String) -> Void)? = nil
     private var isAssistant: Bool { message.role == .assistant }
+    private var canSave: Bool {
+        guard onSaveAsNote != nil else { return false }
+        return !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     var body: some View {
         VStack(alignment: isAssistant ? .leading : .trailing, spacing: 4) {
@@ -825,6 +832,31 @@ private struct ChatMessageBubble: View {
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
+
+            if canSave {
+                HStack {
+                    Spacer(minLength: 0)
+                    Button(action: {
+                        onSaveAsNote?(message.content)
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "square.and.arrow.down")
+                                .font(.system(size: 9, weight: .semibold))
+                            Text("Save")
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                        .foregroundColor(isAssistant ? Color(hex: "637063") : Color.white.opacity(0.92))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule()
+                                .fill(isAssistant ? Color(hex: "EEF3EE") : Color.white.opacity(0.18))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.top, 2)
+            }
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 11)
@@ -842,6 +874,13 @@ private struct ChatMessageBubble: View {
             x: 0,
             y: 1
         )
+        .contextMenu {
+            if canSave {
+                Button("Save as note") {
+                    onSaveAsNote?(message.content)
+                }
+            }
+        }
     }
 
     private var bubbleFillStyle: AnyShapeStyle {

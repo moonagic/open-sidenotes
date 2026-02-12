@@ -306,13 +306,12 @@ struct MarkdownEditor: NSViewRepresentable {
                 return
             }
 
-            let cursorOffset = command.template.contains("text") || command.template.contains("url") ?
-                command.template.distance(from: command.template.startIndex,
-                                         to: command.template.range(of: "text")?.lowerBound ?? command.template.endIndex) :
-                command.template.count
+            let resolved = resolveTemplateAndCursorOffset(for: command)
+            let template = resolved.template
+            let cursorOffset = resolved.cursorOffset
 
-            if textView.shouldChangeText(in: range, replacementString: command.template) {
-                textView.textStorage?.replaceCharacters(in: range, with: command.template)
+            if textView.shouldChangeText(in: range, replacementString: template) {
+                textView.textStorage?.replaceCharacters(in: range, with: template)
                 textView.didChangeText()
 
                 let newPosition = range.location + cursorOffset
@@ -338,6 +337,28 @@ struct MarkdownEditor: NSViewRepresentable {
             }
 
             slashCommandRange = nil
+        }
+
+        private func resolveTemplateAndCursorOffset(for command: SlashCommand) -> (template: String, cursorOffset: Int) {
+            var template = command.resolvedTemplate()
+
+            if let cursorMarkerRange = template.range(of: SlashCommand.cursorMarker) {
+                let offset = template.distance(from: template.startIndex, to: cursorMarkerRange.lowerBound)
+                template.removeSubrange(cursorMarkerRange)
+                return (template, offset)
+            }
+
+            if let textRange = template.range(of: "text") {
+                let offset = template.distance(from: template.startIndex, to: textRange.lowerBound)
+                return (template, offset)
+            }
+
+            if let urlRange = template.range(of: "url") {
+                let offset = template.distance(from: template.startIndex, to: urlRange.lowerBound)
+                return (template, offset)
+            }
+
+            return (template, template.count)
         }
 
         func closeSlashMenu() {
