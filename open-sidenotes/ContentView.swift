@@ -1,62 +1,15 @@
 import SwiftUI
 import Foundation
 
-private enum WorkspaceMode: String, CaseIterable, Identifiable {
-    case notes
-    case chat
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .notes:
-            return "Notes"
-        case .chat:
-            return "AI Chat"
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .notes:
-            return "Write fast, organize later"
-        case .chat:
-            return "Think with AI, grounded in your notes"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .notes:
-            return "note.text"
-        case .chat:
-            return "bubble.left.and.bubble.right"
-        }
-    }
-
-    var shortcut: String {
-        switch self {
-        case .notes:
-            return "⌘1"
-        case .chat:
-            return "⌘2"
-        }
-    }
-}
-
 struct ContentView: View {
     @StateObject private var noteStore = NoteStore()
-    @StateObject private var chatService = AIChatService()
-    @AppStorage("workspace_mode") private var workspaceModeRawValue: String = WorkspaceMode.notes.rawValue
 
-    @State private var mode: WorkspaceMode = .notes
     @State private var selectedNote: Note?
     @State private var editingNoteId: UUID?
     @State private var editingTitle: String = ""
     @State private var editingContent: String = ""
     @State private var saveTask: Task<Void, Never>?
     @State private var showDrawer: Bool = false
-    @State private var showChatDrawer: Bool = false
     @State private var isLoadingNote: Bool = false
     @State private var showQuickOpen: Bool = false
     @State private var recentNoteIDs: [UUID] = RecentNotesManager.shared.recentNoteIDs()
@@ -65,25 +18,9 @@ struct ContentView: View {
         editingNoteId != nil
     }
 
-    private var currentNoteContext: ChatNoteContext? {
-        let sourceTitle = isEditing ? editingTitle : (selectedNote?.title ?? "")
-        let sourceContent = isEditing ? editingContent : (selectedNote?.content ?? "")
-        let trimmedContent = sourceContent.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedContent.isEmpty else { return nil }
-
-        let normalizedTitle = sourceTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let title = normalizedTitle.isEmpty ? "Untitled" : normalizedTitle
-        return ChatNoteContext(title: title, content: trimmedContent)
-    }
-
-    private var modeMetaTitle: String {
-        switch mode {
-        case .notes:
-            let trimmed = editingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? "Untitled" : trimmed
-        case .chat:
-            return chatService.currentSessionTitle
-        }
+    private var noteMetaTitle: String {
+        let trimmed = editingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Untitled" : trimmed
     }
 
     var body: some View {
@@ -91,35 +28,15 @@ struct ContentView: View {
             Color(hex: "F4F5F1").ignoresSafeArea()
 
             VStack(spacing: 8) {
-                WorkspaceHeader(
-                    mode: $mode,
-                    metaTitle: modeMetaTitle,
-                    onSelectMode: { selected in
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            mode = selected
-                            if selected != .notes {
-                                showDrawer = false
-                            }
-                            if selected != .chat {
-                                showChatDrawer = false
-                            }
-                        }
-                    },
+                NotesHeader(
+                    metaTitle: noteMetaTitle,
                     onToggleSidebar: {
                         withAnimation(.easeInOut(duration: 0.18)) {
-                            if mode == .notes {
-                                showDrawer.toggle()
-                            } else {
-                                showChatDrawer.toggle()
-                            }
+                            showDrawer.toggle()
                         }
                     },
                     onPrimaryAction: {
-                        if mode == .notes {
-                            createNewNote()
-                        } else {
-                            chatService.startNewSession()
-                        }
+                        createNewNote()
                     },
                     onOpenSettings: {
                         openSettings()
@@ -135,39 +52,25 @@ struct ContentView: View {
                         )
                         .shadow(color: Color.black.opacity(0.02), radius: 6, x: 0, y: 1)
 
-                    Group {
-                        if mode == .notes {
-                            NoteEditorView(
-                                noteStore: noteStore,
-                                selectedNote: $selectedNote,
-                                isEditing: .constant(isEditing),
-                                title: $editingTitle,
-                                content: $editingContent,
-                                onToggleDrawer: {
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        showDrawer.toggle()
-                                    }
-                                },
-                                showMenuButton: false
-                            )
-                        } else {
-                            ChatWorkspaceView(
-                                chatService: chatService,
-                                noteContext: currentNoteContext,
-                                showHeader: false,
-                                isSessionDrawerVisible: $showChatDrawer,
-                                onSaveMessageAsNote: { message in
-                                    saveChatMessageAsNote(message)
-                                }
-                            )
-                        }
-                    }
+                    NoteEditorView(
+                        noteStore: noteStore,
+                        selectedNote: $selectedNote,
+                        isEditing: .constant(isEditing),
+                        title: $editingTitle,
+                        content: $editingContent,
+                        onToggleDrawer: {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showDrawer.toggle()
+                            }
+                        },
+                        showMenuButton: false
+                    )
                     .clipShape(RoundedRectangle(cornerRadius: 14))
                 }
             }
             .padding(8)
 
-            if showDrawer && mode == .notes {
+            if showDrawer {
                 NoteListDrawer(
                     noteStore: noteStore,
                     selectedNote: $selectedNote,
@@ -199,21 +102,7 @@ struct ContentView: View {
             }
         }
         .onAppear {
-            restoreWorkspaceMode()
             refreshRecentNotes()
-        }
-        .onChange(of: mode) { newMode in
-            workspaceModeRawValue = newMode.rawValue
-            if newMode != .notes {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    showDrawer = false
-                }
-            }
-            if newMode != .chat {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    showChatDrawer = false
-                }
-            }
         }
         .onChange(of: selectedNote) { newNote in
             handleNoteSelection(newNote)
@@ -348,7 +237,6 @@ struct ContentView: View {
                 content: ""
             )
             selectedNote = newNote
-            mode = .notes
         }
     }
 
@@ -359,7 +247,6 @@ struct ContentView: View {
 
         if showQuickOpen {
             showDrawer = false
-            showChatDrawer = false
         }
     }
 
@@ -367,9 +254,7 @@ struct ContentView: View {
         withAnimation(.easeInOut(duration: 0.12)) {
             showQuickOpen = false
             showDrawer = false
-            showChatDrawer = false
         }
-        mode = .notes
         selectedNote = note
     }
 
@@ -392,20 +277,6 @@ struct ContentView: View {
                 title: title,
                 content: todayNoteTemplate(from: now)
             )
-            await MainActor.run {
-                openNoteFromQuickOpen(note)
-            }
-        }
-    }
-
-    private func saveChatMessageAsNote(_ message: String) {
-        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-
-        let title = noteTitleFromChatMessage(trimmed)
-
-        Task {
-            let note = await noteStore.addNote(title: title, content: trimmed)
             await MainActor.run {
                 openNoteFromQuickOpen(note)
             }
@@ -446,53 +317,16 @@ struct ContentView: View {
         """
     }
 
-    private func noteTitleFromChatMessage(_ message: String) -> String {
-        let firstLine = message
-            .components(separatedBy: .newlines)
-            .first?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-        if !firstLine.isEmpty {
-            return String(firstLine.prefix(48))
-        }
-
-        return "Saved Chat \(Self.dailyNoteDateFormatter.string(from: Date()))"
-    }
-
     private static let dailyNoteDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
 
-    private func restoreWorkspaceMode() {
-        mode = WorkspaceMode(rawValue: workspaceModeRawValue) ?? .notes
-    }
-
     private var workspaceShortcuts: some View {
         Group {
             Button("") {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    mode = .notes
-                }
-            }
-            .keyboardShortcut("1", modifiers: .command)
-            .hidden()
-
-            Button("") {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    mode = .chat
-                }
-            }
-            .keyboardShortcut("2", modifiers: .command)
-            .hidden()
-
-            Button("") {
-                if mode == .notes {
-                    createNewNote()
-                } else {
-                    chatService.startNewSession()
-                }
+                createNewNote()
             }
             .keyboardShortcut("n", modifiers: .command)
             .hidden()
@@ -518,42 +352,26 @@ struct ContentView: View {
     }
 }
 
-private struct WorkspaceHeader: View {
-    @Binding var mode: WorkspaceMode
+private struct NotesHeader: View {
     let metaTitle: String
-    let onSelectMode: (WorkspaceMode) -> Void
     let onToggleSidebar: () -> Void
     let onPrimaryAction: () -> Void
     let onOpenSettings: () -> Void
 
-    private var sidebarTooltip: String {
-        mode == .notes ? "Toggle notes drawer" : "Toggle chats drawer"
-    }
-
-    private var primaryActionLabel: String {
-        mode == .notes ? "New note" : "New chat"
-    }
-
-    private var primaryActionIcon: String {
-        mode == .notes ? "square.and.pencil" : "plus.bubble"
-    }
-
     var body: some View {
         VStack(spacing: 6) {
             HStack(spacing: 8) {
-                HeaderIconButton(icon: "sidebar.left", tooltip: sidebarTooltip, action: onToggleSidebar)
-
-                WorkspaceModeSwitcher(mode: $mode, onSelectMode: onSelectMode)
+                HeaderIconButton(icon: "sidebar.left", tooltip: "Toggle notes drawer", action: onToggleSidebar)
 
                 Spacer(minLength: 0)
 
-                HeaderActionButton(label: primaryActionLabel, icon: primaryActionIcon, action: onPrimaryAction)
+                HeaderActionButton(label: "New note", icon: "square.and.pencil", action: onPrimaryAction)
 
                 HeaderIconButton(icon: "gearshape", tooltip: "Settings", action: onOpenSettings)
             }
 
             HStack(spacing: 6) {
-                Image(systemName: mode.icon)
+                Image(systemName: "note.text")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(Color(hex: "6B716B"))
 
@@ -588,46 +406,6 @@ private struct WorkspaceHeader: View {
                         .stroke(Color(hex: "E3E7DF"), lineWidth: 1)
                 )
                 .shadow(color: Color.black.opacity(0.025), radius: 6, x: 0, y: 1)
-        )
-    }
-}
-
-private struct WorkspaceModeSwitcher: View {
-    @Binding var mode: WorkspaceMode
-    let onSelectMode: (WorkspaceMode) -> Void
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(WorkspaceMode.allCases) { item in
-                Button {
-                    onSelectMode(item)
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: item.icon)
-                            .font(.system(size: 10, weight: .semibold))
-                        Text(item.title)
-                            .font(.system(size: 10, weight: .semibold))
-                    }
-                    .foregroundColor(mode == item ? Color(hex: "3F5F4B") : Color(hex: "6B6F69"))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(
-                        RoundedRectangle(cornerRadius: 7)
-                            .fill(mode == item ? Color(hex: "DCE8DD") : Color.clear)
-                    )
-                }
-                .buttonStyle(.plain)
-                .help("\(item.title) (\(item.shortcut))")
-            }
-        }
-        .padding(2)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(hex: "F2F5F0"))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color(hex: "E4E6DF"), lineWidth: 1)
-                )
         )
     }
 }

@@ -80,7 +80,6 @@ struct SettingsView: View {
     @State private var showReloadAlert = false
 
     @ObservedObject private var shortcutSettings = ShortcutSettings.shared
-    @ObservedObject private var aiChatSettings = AIChatSettings.shared
     @ObservedObject private var updateService = GitHubUpdateService.shared
 
     let onPathChanged: () -> Void
@@ -204,74 +203,6 @@ struct SettingsView: View {
                     }
 
                     SettingsCard(
-                        title: "AI Chat",
-                        subtitle: "Model, base URL and API key"
-                    ) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Model")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(Color(hex: "5C645E"))
-
-                            TextField("gpt-4o-mini", text: $aiChatSettings.modelName)
-                                .textFieldStyle(.plain)
-                                .font(.system(size: 13))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 9)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 9)
-                                        .fill(Color(hex: "F3F6F1"))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 9)
-                                                .stroke(Color(hex: "E1E7DE"), lineWidth: 1)
-                                        )
-                                )
-                        }
-
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Base URL")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(Color(hex: "5C645E"))
-
-                            TextField(AIChatSettings.defaultBaseURL, text: $aiChatSettings.baseURL)
-                                .textFieldStyle(.plain)
-                                .font(.system(size: 13))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 9)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 9)
-                                        .fill(Color(hex: "F3F6F1"))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 9)
-                                                .stroke(Color(hex: "E1E7DE"), lineWidth: 1)
-                                        )
-                                )
-                        }
-
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("OpenAI API Key")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(Color(hex: "5C645E"))
-
-                            SecureField("sk-...", text: $aiChatSettings.apiKey)
-                                .textFieldStyle(.plain)
-                                .font(.system(size: 13))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 9)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 9)
-                                        .fill(Color(hex: "F3F6F1"))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 9)
-                                                .stroke(Color(hex: "E1E7DE"), lineWidth: 1)
-                                        )
-                                )
-                        }
-
-                        sectionHint("Base URL supports custom OpenAI-compatible endpoints")
-                        sectionHint("API key is stored locally in UserDefaults")
-                    }
-
-                    SettingsCard(
                         title: "Updates",
                         subtitle: "Release and version information"
                     ) {
@@ -326,7 +257,7 @@ struct SettingsView: View {
                 .font(.system(size: 26, weight: .bold))
                 .foregroundColor(Color(hex: "27302A"))
 
-            Text("Tune workspace behavior, storage and AI preferences")
+            Text("Tune workspace behavior, storage and update preferences")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(Color(hex: "7C857E"))
         }

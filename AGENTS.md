@@ -6,20 +6,18 @@ It defines product direction, implementation guardrails, and delivery standards.
 ## Mission
 
 - Keep Open Sidenotes a notes-first app for fast, low-friction capture.
-- Treat AI Chat as a core capability next to Notes, not a secondary add-on.
 - Favor elegant simplicity over feature breadth.
 
 ## Product Direction
 
-- Keep Notes and AI Chat as the two primary modes.
+- Keep Notes as the primary mode and avoid branching into secondary workspaces.
 - Remove or de-emphasize task-module style UX from the main product flow.
 - Preserve quick capture behavior: open, type, save should feel immediate.
 - Improve polish and reliability before adding peripheral features.
 
 ## UX Guardrails
 
-- Settings must remain easy to reach from both Notes and AI Chat.
-- Mode switching should be obvious and one-step whenever possible.
+- Settings must remain easy to reach from the notes workspace.
 - Avoid deep navigation for frequent actions.
 - Reduce visual noise: clear hierarchy, deliberate spacing, simple controls.
 - Prefer fewer stronger UI elements over dense control surfaces.
@@ -27,16 +25,15 @@ It defines product direction, implementation guardrails, and delivery standards.
 ## Current Priorities (Ordered)
 
 1. Notes capture/editing speed and reliability.
-2. AI Chat usability and integration quality.
-3. Navigation simplification between core modes.
-4. Visual refinement with minimal complexity.
-5. Structural refactors that improve maintainability without UX regression.
+2. Navigation simplification in the notes workflow.
+3. Visual refinement with minimal complexity.
+4. Structural refactors that improve maintainability without UX regression.
 
 ## Scope Guardrails
 
 - Do not re-introduce task-manager-centric IA as a primary experience.
 - Do not add complex multi-step flows for common actions.
-- Do not ship feature-heavy UI that dilutes Notes + Chat focus.
+- Do not ship feature-heavy UI that dilutes the notes-first focus.
 - For any new feature, require a clear fit with the notes-first workflow.
 
 ## Engineering Preferences
@@ -80,7 +77,7 @@ It defines product direction, implementation guardrails, and delivery standards.
 
 - Change aligns with product direction and UX guardrails above.
 - Relevant build/tests pass, or any unrun checks are explicitly called out.
-- No obvious regression in Notes-first flow or Notes/Chat switching.
+- No obvious regression in the Notes-first flow.
 - Documentation is updated when behavior or conventions changed.
 
 ## Living Document

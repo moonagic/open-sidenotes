@@ -201,7 +201,7 @@ struct NoteListDrawer: View {
 
             Spacer()
 
-            Text("Switch: ⌘1 / ⌘2")
+            Text("Quick open: ⌘J")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundColor(Color(hex: "A0A59F"))
         }
