@@ -1,25 +1,22 @@
 import SwiftUI
+import AppKit
 
 struct NoteListDrawer: View {
     @ObservedObject var noteStore: NoteStore
     @Binding var selectedNote: Note?
+    let recentNoteIDs: [UUID]
     var onClose: () -> Void
 
     @State private var hoveredNoteId: UUID?
     @State private var searchText: String = ""
-    @State private var debouncedSearch: String = ""
-    @State private var searchTask: DispatchWorkItem?
+    @State private var filteredNotes: [Note] = []
+    @State private var selectedIndex: Int = 0
+    @State private var keyMonitor: Any?
+    @State private var indexedNotes: [QuickOpenSearchService.IndexedNote] = []
+    @State private var searchGeneration: Int = 0
+    @State private var indexGeneration: Int = 0
+    @State private var pendingSearchWorkItem: DispatchWorkItem?
     @FocusState private var isSearchFocused: Bool
-
-    private var filteredNotes: [Note] {
-        guard !debouncedSearch.isEmpty else { return noteStore.notes }
-        let query = debouncedSearch.lowercased()
-
-        return noteStore.notes.filter { note in
-            note.title.lowercased().contains(query) ||
-            note.content.lowercased().contains(query)
-        }
-    }
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -54,9 +51,30 @@ struct NoteListDrawer: View {
             }
         }
         .onAppear {
+            rebuildIndexAndSearch()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 isSearchFocused = true
             }
+            attachKeyMonitor()
+            syncSelectionToCurrentNote()
+        }
+        .onDisappear {
+            pendingSearchWorkItem?.cancel()
+            pendingSearchWorkItem = nil
+            detachKeyMonitor()
+        }
+        .onChange(of: searchText) {
+            selectedIndex = 0
+            scheduleSearch()
+        }
+        .onChange(of: noteStore.notes) {
+            rebuildIndexAndSearch()
+        }
+        .onChange(of: recentNoteIDs) {
+            scheduleSearch()
+        }
+        .onChange(of: selectedNote) {
+            syncSelectionToCurrentNote()
         }
     }
 
@@ -94,19 +112,13 @@ struct NoteListDrawer: View {
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(Color(hex: "2E332F"))
                 .focused($isSearchFocused)
-                .onChange(of: searchText) { newValue in
-                    searchTask?.cancel()
-                    let task = DispatchWorkItem {
-                        debouncedSearch = newValue
-                    }
-                    searchTask = task
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.22, execute: task)
+                .onSubmit {
+                    openSelectedNote()
                 }
 
             if !searchText.isEmpty {
                 Button {
                     searchText = ""
-                    debouncedSearch = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 13, weight: .medium))
@@ -155,12 +167,13 @@ struct NoteListDrawer: View {
             } else {
                 CustomScrollView {
                     LazyVStack(spacing: 8) {
-                        ForEach(filteredNotes) { note in
+                        ForEach(Array(filteredNotes.enumerated()), id: \.element.id) { index, note in
                             DrawerNoteListItemCard(
                                 note: note,
                                 isSelected: selectedNote?.id == note.id,
+                                isFocused: index == selectedIndex,
                                 isHovered: hoveredNoteId == note.id,
-                                searchQuery: debouncedSearch
+                                searchQuery: searchText
                             )
                             .contentShape(Rectangle())
                             .onTapGesture {
@@ -169,6 +182,9 @@ struct NoteListDrawer: View {
                             }
                             .onHover { hovering in
                                 hoveredNoteId = hovering ? note.id : nil
+                                if hovering {
+                                    selectedIndex = index
+                                }
                             }
                             .contextMenu {
                                 Button(role: .destructive) {
@@ -240,6 +256,139 @@ struct NoteListDrawer: View {
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 20)
     }
+
+    private func rebuildIndexAndSearch() {
+        indexGeneration += 1
+        let generation = indexGeneration
+        let notesSnapshot = noteStore.notes
+        let querySnapshot = searchText
+        let recentSnapshot = recentNoteIDs
+
+        if querySnapshot.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            filteredNotes = notesSnapshot
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let rebuiltIndex = QuickOpenSearchService.buildIndex(from: notesSnapshot)
+            let ranked = QuickOpenSearchService.rankedNotes(
+                from: rebuiltIndex,
+                query: querySnapshot,
+                recentNoteIDs: recentSnapshot,
+                limit: max(24, rebuiltIndex.count)
+            )
+
+            DispatchQueue.main.async {
+                guard generation == indexGeneration else { return }
+                indexedNotes = rebuiltIndex
+                applySearchResults(ranked)
+            }
+        }
+    }
+
+    private func scheduleSearch() {
+        pendingSearchWorkItem?.cancel()
+
+        searchGeneration += 1
+        let generation = searchGeneration
+        let querySnapshot = searchText
+        let recentSnapshot = recentNoteIDs
+        let indexedSnapshot = indexedNotes
+
+        let workItem = DispatchWorkItem {
+            let ranked = QuickOpenSearchService.rankedNotes(
+                from: indexedSnapshot,
+                query: querySnapshot,
+                recentNoteIDs: recentSnapshot,
+                limit: max(24, indexedSnapshot.count)
+            )
+
+            DispatchQueue.main.async {
+                guard generation == searchGeneration else { return }
+                applySearchResults(ranked)
+            }
+        }
+
+        pendingSearchWorkItem = workItem
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.08, execute: workItem)
+    }
+
+    private func applySearchResults(_ ranked: [Note]) {
+        filteredNotes = ranked
+
+        let hasQuery = !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if !hasQuery,
+           let currentSelected = selectedNote,
+           let currentIndex = ranked.firstIndex(where: { $0.id == currentSelected.id }) {
+            selectedIndex = currentIndex
+            return
+        }
+
+        if selectedIndex >= ranked.count {
+            selectedIndex = max(0, ranked.count - 1)
+        }
+    }
+
+    private func openSelectedNote() {
+        guard !filteredNotes.isEmpty else {
+            return
+        }
+
+        let safeIndex = min(max(0, selectedIndex), filteredNotes.count - 1)
+        selectedNote = filteredNotes[safeIndex]
+        onClose()
+    }
+
+    private func moveSelection(by offset: Int) {
+        guard !filteredNotes.isEmpty else {
+            return
+        }
+
+        selectedIndex = min(max(0, selectedIndex + offset), filteredNotes.count - 1)
+    }
+
+    private func syncSelectionToCurrentNote() {
+        guard let selectedNote,
+              let index = filteredNotes.firstIndex(where: { $0.id == selectedNote.id }) else {
+            return
+        }
+
+        selectedIndex = index
+    }
+
+    private func attachKeyMonitor() {
+        detachKeyMonitor()
+
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if !modifiers.isEmpty {
+                return event
+            }
+
+            switch event.keyCode {
+            case 125: // Down
+                moveSelection(by: 1)
+                return nil
+            case 126: // Up
+                moveSelection(by: -1)
+                return nil
+            case 36, 76: // Return / Enter
+                openSelectedNote()
+                return nil
+            case 53: // Escape
+                onClose()
+                return nil
+            default:
+                return event
+            }
+        }
+    }
+
+    private func detachKeyMonitor() {
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+            self.keyMonitor = nil
+        }
+    }
 }
 
 private struct DrawerIconButton: View {
@@ -266,6 +415,7 @@ private struct DrawerIconButton: View {
 private struct DrawerNoteListItemCard: View {
     let note: Note
     let isSelected: Bool
+    let isFocused: Bool
     let isHovered: Bool
     let searchQuery: String
 
@@ -286,23 +436,9 @@ private struct DrawerNoteListItemCard: View {
             Text(highlightedPreview)
                 .font(.system(size: 12, weight: .regular))
                 .lineLimit(2)
-
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(Color(hex: "7C9885"))
-                    .frame(width: 5, height: 5)
-                    .opacity(isSelected ? 1 : 0)
-
-                Text(noteTitle)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(Color(hex: "9DA39C"))
-                    .lineLimit(1)
-
-                Spacer()
-            }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 11)
+        .padding(.vertical, 10)
         .background(cardBackground)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
@@ -314,6 +450,9 @@ private struct DrawerNoteListItemCard: View {
     private var cardBackground: some ShapeStyle {
         if isSelected {
             return AnyShapeStyle(Color(hex: "7C9885").opacity(0.13))
+        }
+        if isFocused {
+            return AnyShapeStyle(Color(hex: "EEF3EC"))
         }
         if isHovered {
             return AnyShapeStyle(Color(hex: "F1F4EE"))
@@ -388,9 +527,10 @@ private struct DrawerNoteListItemCard: View {
     @Previewable @State var selectedNote: Note? = nil
     let noteStore = NoteStore()
 
-    return NoteListDrawer(
+    NoteListDrawer(
         noteStore: noteStore,
         selectedNote: $selectedNote,
+        recentNoteIDs: [],
         onClose: {}
     )
     .frame(width: 900, height: 600)

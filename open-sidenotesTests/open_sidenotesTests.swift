@@ -88,6 +88,31 @@ struct QuickOpenSearchServiceTests {
 
         #expect(result.first?.id == noteB.id)
     }
+
+    @Test func emptyQueryStillPrefersRecentNotes() throws {
+        let older = Note(
+            id: UUID(),
+            title: "Older",
+            content: "same",
+            createdAt: Date(timeIntervalSince1970: 10),
+            updatedAt: Date(timeIntervalSince1970: 10)
+        )
+        let newer = Note(
+            id: UUID(),
+            title: "Newer",
+            content: "same",
+            createdAt: Date(timeIntervalSince1970: 20),
+            updatedAt: Date(timeIntervalSince1970: 20)
+        )
+
+        let result = QuickOpenSearchService.rankedNotes(
+            from: [older, newer],
+            query: "",
+            recentNoteIDs: [older.id]
+        )
+
+        #expect(result.first?.id == older.id)
+    }
 }
 
 struct SlashCommandTests {
@@ -213,6 +238,39 @@ struct FileStorageServiceTests {
                 let note = try #require(loaded.first(where: { $0.id == id }))
                 #expect(note.title == "Legacy: Note Title")
                 #expect(note.content == "legacy body")
+            }
+        }
+    }
+
+    @Test func skipsWriteWhenOnlyNormalizedTitleOrLineEndingsDiffer() async throws {
+        try await StorageTestLock.shared.run {
+            try await withIsolatedStorage { service, directory in
+                let baseline = Note(
+                    id: UUID(),
+                    title: "Plan",
+                    content: "line1\nline2",
+                    createdAt: Date(timeIntervalSince1970: 100),
+                    updatedAt: Date(timeIntervalSince1970: 200)
+                )
+                try await service.saveNote(baseline)
+
+                let normalizedEquivalent = Note(
+                    id: baseline.id,
+                    title: "  Plan  ",
+                    content: "line1\r\nline2",
+                    createdAt: baseline.createdAt,
+                    updatedAt: Date(timeIntervalSince1970: 999)
+                )
+                try await service.saveNote(normalizedEquivalent)
+
+                let files = try markdownFiles(in: directory)
+                #expect(files.count == 1)
+
+                let loaded = try await service.loadAllNotes()
+                let saved = try #require(loaded.first(where: { $0.id == baseline.id }))
+                #expect(saved.title == baseline.title)
+                #expect(saved.content == baseline.content)
+                #expect(saved.updatedAt == baseline.updatedAt)
             }
         }
     }

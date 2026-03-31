@@ -156,7 +156,21 @@ class FileStorageService {
         try createStorageDirectoryIfNeededLocked()
         try hydrateIndexIfNeededLocked()
 
-        let previousURL = noteFileIndex[note.id]
+        let previousURL: URL?
+        if let indexedURL = noteFileIndex[note.id] {
+            previousURL = indexedURL
+        } else {
+            previousURL = try findFileByIDLocked(note.id)
+        }
+
+        if let previousURL,
+           fileManager.fileExists(atPath: previousURL.path),
+           let existingNote = try? loadNoteSync(from: previousURL),
+           !hasMeaningfulPersistenceChange(existing: existingNote, incoming: note) {
+            setIndexLocked(noteID: note.id, fileURL: previousURL)
+            return
+        }
+
         let fileURL = try destinationFileURLLocked(for: note)
         let content = formatNoteContent(note)
         try content.write(to: fileURL, atomically: true, encoding: .utf8)
@@ -171,6 +185,25 @@ class FileStorageService {
         }
 
         setIndexLocked(noteID: note.id, fileURL: fileURL)
+    }
+
+    private func hasMeaningfulPersistenceChange(existing: Note, incoming: Note) -> Bool {
+        let existingTitle = normalizeTitleForPersistence(existing.title)
+        let incomingTitle = normalizeTitleForPersistence(incoming.title)
+        let existingContent = normalizeContentForPersistence(existing.content)
+        let incomingContent = normalizeContentForPersistence(incoming.content)
+
+        return existingTitle != incomingTitle || existingContent != incomingContent
+    }
+
+    private func normalizeTitleForPersistence(_ title: String) -> String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func normalizeContentForPersistence(_ content: String) -> String {
+        content
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
     }
 
     private func canUseFileURLLocked(_ fileURL: URL, noteID: UUID) -> Bool {

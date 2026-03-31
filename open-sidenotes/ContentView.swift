@@ -18,18 +18,12 @@ struct ContentView: View {
         editingNoteId != nil
     }
 
-    private var noteMetaTitle: String {
-        let trimmed = editingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "Untitled" : trimmed
-    }
-
     var body: some View {
         ZStack(alignment: .leading) {
             Color(hex: "F4F5F1").ignoresSafeArea()
 
             VStack(spacing: 8) {
                 NotesHeader(
-                    metaTitle: noteMetaTitle,
                     onToggleSidebar: {
                         withAnimation(.easeInOut(duration: 0.18)) {
                             showDrawer.toggle()
@@ -74,6 +68,7 @@ struct ContentView: View {
                 NoteListDrawer(
                     noteStore: noteStore,
                     selectedNote: $selectedNote,
+                    recentNoteIDs: recentNoteIDs,
                     onClose: {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             showDrawer = false
@@ -230,6 +225,10 @@ struct ContentView: View {
 
     private func scheduleAutoSave() {
         guard let noteId = editingNoteId else { return }
+        if let note = noteStore.getNote(by: noteId),
+           !hasMeaningfulDraftChange(note: note, title: editingTitle, content: editingContent) {
+            return
+        }
 
         saveTask?.cancel()
 
@@ -241,7 +240,8 @@ struct ContentView: View {
 
             guard !Task.isCancelled else { return }
 
-            if let note = noteStore.getNote(by: noteId) {
+            if let note = noteStore.getNote(by: noteId),
+               hasMeaningfulDraftChange(note: note, title: titleToSave, content: contentToSave) {
                 await noteStore.updateNote(note, title: titleToSave, content: contentToSave)
             }
         }
@@ -323,6 +323,24 @@ struct ContentView: View {
         raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
+    private func hasMeaningfulDraftChange(note: Note, title: String, content: String) -> Bool {
+        let existingTitle = normalizeTitleForPersistence(note.title)
+        let incomingTitle = normalizeTitleForPersistence(title)
+        let existingContent = normalizeContentForPersistence(note.content)
+        let incomingContent = normalizeContentForPersistence(content)
+        return existingTitle != incomingTitle || existingContent != incomingContent
+    }
+
+    private func normalizeTitleForPersistence(_ raw: String) -> String {
+        raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func normalizeContentForPersistence(_ raw: String) -> String {
+        raw
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+    }
+
     private func todayNoteTitle(from date: Date) -> String {
         "Daily \(Self.dailyNoteDateFormatter.string(from: date))"
     }
@@ -379,48 +397,19 @@ struct ContentView: View {
 }
 
 private struct NotesHeader: View {
-    let metaTitle: String
     let onToggleSidebar: () -> Void
     let onPrimaryAction: () -> Void
     let onOpenSettings: () -> Void
 
     var body: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 8) {
-                HeaderIconButton(icon: "sidebar.left", tooltip: "Toggle notes drawer", action: onToggleSidebar)
+        HStack(spacing: 8) {
+            HeaderIconButton(icon: "sidebar.left", tooltip: "Toggle notes drawer", action: onToggleSidebar)
 
-                Spacer(minLength: 0)
+            Spacer(minLength: 0)
 
-                HeaderActionButton(label: "New note", icon: "square.and.pencil", action: onPrimaryAction)
+            HeaderActionButton(label: "New note", icon: "square.and.pencil", action: onPrimaryAction)
 
-                HeaderIconButton(icon: "gearshape", tooltip: "Settings", action: onOpenSettings)
-            }
-
-            HStack(spacing: 6) {
-                Image(systemName: "note.text")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(Color(hex: "6B716B"))
-
-                Text(metaTitle)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(Color(hex: "7B817B"))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.92)
-                    .truncationMode(.tail)
-                    .layoutPriority(1)
-
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(
-                RoundedRectangle(cornerRadius: 7)
-                    .fill(Color(hex: "F6F8F4"))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 7)
-                            .stroke(Color(hex: "E5E9E1"), lineWidth: 1)
-                    )
-            )
+            HeaderIconButton(icon: "gearshape", tooltip: "Settings", action: onOpenSettings)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)

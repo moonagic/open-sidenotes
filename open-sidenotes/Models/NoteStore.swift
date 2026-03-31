@@ -70,10 +70,30 @@ class NoteStore: ObservableObject {
             return nil
         }
 
+        let existingNote = notes[index]
+        let existingTitle = normalizeTitleForPersistence(existingNote.title)
+        let incomingTitle = normalizeTitleForPersistence(title)
+        let existingContent = normalizeContentForPersistence(existingNote.content)
+        let incomingContent = normalizeContentForPersistence(content)
+
+        guard existingTitle != incomingTitle || existingContent != incomingContent else {
+            return nil
+        }
+
         notes[index].title = title
         notes[index].content = content
         notes[index].updatedAt = Date()
         return notes[index]
+    }
+
+    private func normalizeTitleForPersistence(_ title: String) -> String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func normalizeContentForPersistence(_ content: String) -> String {
+        content
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
     }
 
     private func saveNote(_ note: Note) async {

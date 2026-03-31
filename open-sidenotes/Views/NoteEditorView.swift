@@ -18,16 +18,6 @@ struct NoteEditorView: View {
     @State private var currentMatchIndex = 0
     @State private var isHoveringFindButton = false
 
-    private var wordCount: Int {
-        content
-            .split { $0.isWhitespace || $0.isNewline }
-            .count
-    }
-
-    private var contentStats: String {
-        "\(wordCount) words · \(content.count) chars"
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
@@ -49,12 +39,6 @@ struct NoteEditorView: View {
                 }
 
                 Spacer()
-
-                if isEditing || !content.isEmpty {
-                    Text(contentStats)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(Color(hex: "9AA097"))
-                }
 
                 Button(action: {
                     withAnimation(.easeInOut(duration: 0.15)) {
@@ -110,18 +94,10 @@ struct NoteEditorView: View {
                         .padding(.bottom, 8)
 
                     if isEditing, let note = selectedNote {
-                        HStack(spacing: 12) {
+                        HStack(spacing: 6) {
                             Text("Last edited \(timeAgo(from: note.updatedAt))")
                                 .font(.system(size: 11, weight: .regular))
                                 .foregroundColor(Color(hex: "999999"))
-
-                            Circle()
-                                .fill(Color(hex: "CCCCCC"))
-                                .frame(width: 3, height: 3)
-
-                            Text("Auto-saving")
-                                .font(.system(size: 11, weight: .regular))
-                                .foregroundColor(Color(hex: "7C9885"))
                         }
                         .padding(.horizontal, 32)
                         .padding(.bottom, 16)

@@ -55,9 +55,7 @@ struct BlockEditor: View {
         .onChange(of: content) { newValue in
             let shouldUpdate = shouldReparse(newValue)
             if shouldUpdate {
-                DispatchQueue.main.async {
-                    parseContent()
-                }
+                parseContent()
             }
         }
     }
@@ -125,17 +123,15 @@ struct BlockEditor: View {
         let oldBlockId = blocks[index].id
         let hasCodeBlock = newValue.contains("```")
 
-        DispatchQueue.main.async {
-            self.blocks[index] = TextBlock(id: oldBlockId, content: newValue)
+        blocks[index] = TextBlock(id: oldBlockId, content: newValue)
 
-            if hasCodeBlock {
-                self.saveContent()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    self.parseContent()
-                }
-            } else {
-                self.saveContent()
+        if hasCodeBlock {
+            saveContent()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                parseContent()
             }
+        } else {
+            saveContent()
         }
     }
 
@@ -145,10 +141,8 @@ struct BlockEditor: View {
         let blockId = codeBlock.id
         let language = codeBlock.language
 
-        DispatchQueue.main.async {
-            self.blocks[index] = CodeBlock(id: blockId, language: language, code: newValue)
-            self.saveContent()
-        }
+        blocks[index] = CodeBlock(id: blockId, language: language, code: newValue)
+        saveContent()
     }
 
     private func saveContent() {
@@ -162,10 +156,8 @@ struct BlockEditor: View {
 
         let previousIndex = index - 1
 
-        DispatchQueue.main.async {
-            self.blocks.remove(at: previousIndex)
-            self.saveContent()
-        }
+        blocks.remove(at: previousIndex)
+        saveContent()
 
         return true
     }

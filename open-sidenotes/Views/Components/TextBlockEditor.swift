@@ -25,10 +25,16 @@ class SelfSizingTextView: NSView {
     }
 
     override var intrinsicContentSize: NSSize {
-        textView.layoutManager?.ensureLayout(for: textView.textContainer!)
-        let usedRect = textView.layoutManager?.usedRect(for: textView.textContainer!) ?? .zero
-        let contentHeight = usedRect.size.height + usedRect.origin.y
-        let height = max(contentHeight + 20, 40)
+        guard let textContainer = textView.textContainer,
+              let layoutManager = textView.layoutManager else {
+            return NSSize(width: NSView.noIntrinsicMetric, height: 40)
+        }
+
+        layoutManager.ensureLayout(for: textContainer)
+        let usedRect = layoutManager.usedRect(for: textContainer)
+        let inset = textView.textContainerInset
+        let contentHeight = usedRect.height + inset.height * 2
+        let height = max(ceil(contentHeight), 40)
 
         return NSSize(width: NSView.noIntrinsicMetric, height: height)
     }
@@ -188,18 +194,14 @@ struct TextBlockEditor: NSViewRepresentable {
 
             checkSlashCommand(in: textView, at: cursorPosition)
 
-            DispatchQueue.main.async {
-                self.containerView?.invalidateIntrinsicContentSize()
-            }
+            containerView?.invalidateIntrinsicContentSize()
         }
 
         func renderMarkdown(in textView: NSTextView, text: String) {
             let attributedString = MarkdownRenderer.shared.render(text)
             textView.textStorage?.setAttributedString(attributedString)
 
-            DispatchQueue.main.async {
-                self.containerView?.invalidateIntrinsicContentSize()
-            }
+            containerView?.invalidateIntrinsicContentSize()
         }
 
         func checkSlashCommand(in textView: NSTextView, at position: Int) {
