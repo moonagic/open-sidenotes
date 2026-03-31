@@ -5,68 +5,123 @@ class FileStorageService {
 
     private let fileManager = FileManager.default
     private let storageDirectoryKey = "customStorageDirectory"
+    private let lock = NSLock()
+    private let iso8601Formatter = ISO8601DateFormatter()
+    private let shouldPersistStorageDirectory: Bool
+    private var storageDirectoryURL: URL
+
+    private var noteFileIndex: [UUID: URL] = [:]
+    private var fileOwnerIndex: [URL: UUID] = [:]
+    private var indexHydrated = false
+    private var indexedStoragePath: String?
 
     var storageDirectory: URL {
         get {
-            if let customPath = UserDefaults.standard.string(forKey: storageDirectoryKey) {
-                return URL(fileURLWithPath: customPath)
-            }
-            return Constants.defaultNotesDirectory()
+            storageDirectoryURL
         }
         set {
-            UserDefaults.standard.set(newValue.path, forKey: storageDirectoryKey)
-            createStorageDirectoryIfNeeded()
+            let normalizedDirectory = newValue.standardizedFileURL
+            lock.lock()
+            defer { lock.unlock() }
+            storageDirectoryURL = normalizedDirectory
+            resetIndexIfNeededLocked(for: normalizedDirectory.path)
+            try? createStorageDirectoryIfNeeded(at: normalizedDirectory)
+
+            if shouldPersistStorageDirectory {
+                UserDefaults.standard.set(normalizedDirectory.path, forKey: storageDirectoryKey)
+            }
         }
     }
 
-    private init() {
-        createStorageDirectoryIfNeeded()
+    private init(
+        shouldPersistStorageDirectory: Bool = true,
+        initialDirectory: URL? = nil
+    ) {
+        self.shouldPersistStorageDirectory = shouldPersistStorageDirectory
+
+        if let initialDirectory {
+            storageDirectoryURL = initialDirectory.standardizedFileURL
+        } else if let customPath = UserDefaults.standard.string(forKey: storageDirectoryKey) {
+            storageDirectoryURL = URL(fileURLWithPath: customPath).standardizedFileURL
+        } else {
+            storageDirectoryURL = Constants.defaultNotesDirectory().standardizedFileURL
+        }
+
+        lock.lock()
+        defer { lock.unlock() }
+        try? createStorageDirectoryIfNeeded(at: storageDirectoryURL)
+        indexedStoragePath = storageDirectoryURL.path
+    }
+
+    convenience init(volatileStorageDirectory directory: URL) {
+        self.init(
+            shouldPersistStorageDirectory: false,
+            initialDirectory: directory
+        )
     }
 
     func loadAllNotes() async throws -> [Note] {
-        let fileURLs = try fileManager.contentsOfDirectory(
-            at: storageDirectory,
-            includingPropertiesForKeys: [.contentModificationDateKey],
-            options: [.skipsHiddenFiles]
-        ).filter { $0.pathExtension == "md" }
+        try withStorageLock {
+            resetIndexIfNeededLocked()
+            try createStorageDirectoryIfNeededLocked()
 
-        return try await withThrowingTaskGroup(of: Note?.self) { group in
-            for fileURL in fileURLs {
-                group.addTask {
-                    try? await self.loadNote(from: fileURL)
-                }
-            }
+            let fileURLs = try markdownFileURLsLocked()
+
+            noteFileIndex.removeAll()
+            fileOwnerIndex.removeAll()
 
             var notes: [Note] = []
-            for try await note in group {
-                if let note = note {
-                    notes.append(note)
-                }
+            notes.reserveCapacity(fileURLs.count)
+
+            for fileURL in fileURLs {
+                let note = try loadNoteSync(from: fileURL)
+                notes.append(note)
+                setIndexLocked(noteID: note.id, fileURL: fileURL)
             }
+
+            indexHydrated = true
+
             return notes.sorted { $0.updatedAt > $1.updatedAt }
         }
     }
 
     func saveNote(_ note: Note) async throws {
-        // Remove old file if title changed
-        try? await removeOldFile(for: note)
-
-        let fileURL = fileURL(for: note)
-        let content = formatNoteContent(note)
-        try content.write(to: fileURL, atomically: true, encoding: .utf8)
-    }
-
-    func deleteNote(_ note: Note) async throws {
-        // Find and delete file by ID
-        if let existingURL = findFile(byId: note.id) {
-            try fileManager.removeItem(at: existingURL)
+        try withStorageLock {
+            try saveNoteLocked(note)
         }
     }
 
-    func fileURL(for note: Note) -> URL {
+    func saveNoteImmediately(_ note: Note) throws {
+        try withStorageLock {
+            try saveNoteLocked(note)
+        }
+    }
+
+    func deleteNote(_ note: Note) async throws {
+        try withStorageLock {
+            resetIndexIfNeededLocked()
+            try createStorageDirectoryIfNeededLocked()
+            try hydrateIndexIfNeededLocked()
+
+            let existingURL: URL?
+            if let indexedURL = noteFileIndex[note.id] {
+                existingURL = indexedURL
+            } else {
+                existingURL = try findFileByIDLocked(note.id)
+            }
+
+            if let existingURL {
+                try fileManager.removeItem(at: existingURL)
+                noteFileIndex.removeValue(forKey: note.id)
+                fileOwnerIndex.removeValue(forKey: existingURL)
+            }
+        }
+    }
+
+    private func preferredBaseFileURL(for note: Note) -> URL {
         let safeName = sanitizeFileName(note.title)
         let baseName = safeName.isEmpty ? "Untitled" : safeName
-        return uniqueFileURL(baseName: baseName, noteId: note.id)
+        return storageDirectory.standardizedFileURL.appendingPathComponent("\(baseName).md")
     }
 
     private func sanitizeFileName(_ name: String) -> String {
@@ -75,53 +130,145 @@ class FileStorageService {
         return sanitized.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func uniqueFileURL(baseName: String, noteId: UUID) -> URL {
-        let baseURL = storageDirectory.appendingPathComponent("\(baseName).md")
+    private func destinationFileURLLocked(for note: Note) throws -> URL {
+        let baseURL = preferredBaseFileURL(for: note).standardizedFileURL
 
-        // If file doesn't exist or belongs to same note, use base name
-        if !fileManager.fileExists(atPath: baseURL.path) {
+        if canUseFileURLLocked(baseURL, noteID: note.id) {
             return baseURL
         }
 
-        if let existingNote = try? loadNoteSync(from: baseURL), existingNote.id == noteId {
-            return baseURL
-        }
-
-        // Find unique name with suffix
+        let baseName = baseURL.deletingPathExtension().lastPathComponent
         var counter = 1
+
         while true {
-            let url = storageDirectory.appendingPathComponent("\(baseName) \(counter).md")
-            if !fileManager.fileExists(atPath: url.path) {
-                return url
-            }
-            if let existingNote = try? loadNoteSync(from: url), existingNote.id == noteId {
-                return url
+            let candidateURL = storageDirectory
+                .standardizedFileURL
+                .appendingPathComponent("\(baseName) \(counter).md")
+            if canUseFileURLLocked(candidateURL, noteID: note.id) {
+                return candidateURL.standardizedFileURL
             }
             counter += 1
         }
     }
 
-    private func findFile(byId id: UUID) -> URL? {
-        guard let files = try? fileManager.contentsOfDirectory(
-            at: storageDirectory,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        ).filter({ $0.pathExtension == "md" }) else { return nil }
+    private func saveNoteLocked(_ note: Note) throws {
+        resetIndexIfNeededLocked()
+        try createStorageDirectoryIfNeededLocked()
+        try hydrateIndexIfNeededLocked()
 
+        let previousURL = noteFileIndex[note.id]
+        let fileURL = try destinationFileURLLocked(for: note)
+        let content = formatNoteContent(note)
+        try content.write(to: fileURL, atomically: true, encoding: .utf8)
+
+        if let previousURL, previousURL != fileURL, fileManager.fileExists(atPath: previousURL.path) {
+            do {
+                try fileManager.removeItem(at: previousURL)
+            } catch CocoaError.fileNoSuchFile {
+                // Ignore: old file already gone.
+            }
+            fileOwnerIndex.removeValue(forKey: previousURL)
+        }
+
+        setIndexLocked(noteID: note.id, fileURL: fileURL)
+    }
+
+    private func canUseFileURLLocked(_ fileURL: URL, noteID: UUID) -> Bool {
+        let normalizedURL = fileURL.standardizedFileURL
+
+        if !fileManager.fileExists(atPath: normalizedURL.path) {
+            return true
+        }
+
+        if let ownerID = ownerIDLocked(for: normalizedURL), ownerID == noteID {
+            return true
+        }
+
+        return false
+    }
+
+    private func ownerIDLocked(for fileURL: URL) -> UUID? {
+        let normalizedURL = fileURL.standardizedFileURL
+
+        if let owner = fileOwnerIndex[normalizedURL] {
+            return owner
+        }
+
+        guard fileManager.fileExists(atPath: normalizedURL.path) else {
+            return nil
+        }
+
+        guard let note = try? loadNoteSync(from: normalizedURL) else {
+            return nil
+        }
+
+        setIndexLocked(noteID: note.id, fileURL: normalizedURL)
+        return note.id
+    }
+
+    private func findFileByIDLocked(_ id: UUID) throws -> URL? {
+        if let indexedURL = noteFileIndex[id] {
+            return indexedURL
+        }
+
+        let files = try markdownFileURLsLocked()
         for file in files {
             if let note = try? loadNoteSync(from: file), note.id == id {
+                setIndexLocked(noteID: id, fileURL: file)
                 return file
             }
         }
+
         return nil
     }
 
-    private func removeOldFile(for note: Note) async throws {
-        guard let oldURL = findFile(byId: note.id) else { return }
-        let newURL = fileURL(for: note)
+    private func hydrateIndexIfNeededLocked() throws {
+        guard !indexHydrated else {
+            return
+        }
 
-        if oldURL != newURL {
-            try fileManager.removeItem(at: oldURL)
+        let fileURLs = try markdownFileURLsLocked()
+        for fileURL in fileURLs {
+            if fileOwnerIndex[fileURL] != nil {
+                continue
+            }
+            if let note = try? loadNoteSync(from: fileURL) {
+                setIndexLocked(noteID: note.id, fileURL: fileURL)
+            }
+        }
+
+        indexHydrated = true
+    }
+
+    private func markdownFileURLsLocked() throws -> [URL] {
+        try fileManager.contentsOfDirectory(
+            at: storageDirectory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        .filter { $0.pathExtension == "md" }
+        .map { $0.standardizedFileURL }
+    }
+
+    private func setIndexLocked(noteID: UUID, fileURL: URL) {
+        let normalizedURL = fileURL.standardizedFileURL
+
+        if let oldURL = noteFileIndex[noteID], oldURL != normalizedURL {
+            fileOwnerIndex.removeValue(forKey: oldURL)
+        }
+
+        noteFileIndex[noteID] = normalizedURL
+        fileOwnerIndex[normalizedURL] = noteID
+    }
+
+    private func resetIndexIfNeededLocked(for path: String? = nil) {
+        let currentPath = path ?? storageDirectory.path
+
+        if indexedStoragePath != currentPath {
+            noteFileIndex.removeAll()
+            fileOwnerIndex.removeAll()
+            indexHydrated = false
+            indexedStoragePath = currentPath
         }
     }
 
@@ -130,28 +277,22 @@ class FileStorageService {
         return parseNoteContent(content, fileURL: fileURL)
     }
 
-    private func loadNote(from fileURL: URL) async throws -> Note {
-        let content = try String(contentsOf: fileURL, encoding: .utf8)
-        return parseNoteContent(content, fileURL: fileURL)
-    }
-
     private func formatNoteContent(_ note: Note) -> String {
-        """
-        ---
-        title: \(note.title)
-        id: \(note.id.uuidString)
-        createdAt: \(ISO8601DateFormatter().string(from: note.createdAt))
-        updatedAt: \(ISO8601DateFormatter().string(from: note.updatedAt))
-        ---
-
-        \(note.content)
-        """
+        let encodedTitle = encodeFrontMatterString(note.title)
+        return [
+            "---",
+            "title: \(encodedTitle)",
+            "id: \(note.id.uuidString)",
+            "createdAt: \(iso8601Formatter.string(from: note.createdAt))",
+            "updatedAt: \(iso8601Formatter.string(from: note.updatedAt))",
+            "---",
+            "",
+            note.content
+        ].joined(separator: "\n")
     }
 
     private func parseNoteContent(_ content: String, fileURL: URL) -> Note {
-        let components = content.components(separatedBy: "---")
-
-        guard components.count >= 3 else {
+        guard let split = splitFrontMatter(from: content) else {
             return Note(
                 id: UUID(uuidString: fileURL.deletingPathExtension().lastPathComponent) ?? UUID(),
                 title: "Untitled",
@@ -161,8 +302,8 @@ class FileStorageService {
             )
         }
 
-        let frontMatter = components[1].trimmingCharacters(in: .whitespacesAndNewlines)
-        let markdownContent = components[2...].joined(separator: "---").trimmingCharacters(in: .whitespacesAndNewlines)
+        let frontMatter = split.frontMatter
+        let markdownContent = split.content
 
         var title = "Untitled"
         var id = UUID()
@@ -171,11 +312,8 @@ class FileStorageService {
 
         let lines = frontMatter.components(separatedBy: .newlines)
         for line in lines {
-            let parts = line.components(separatedBy: ": ")
-            guard parts.count == 2 else { continue }
-
-            let key = parts[0].trimmingCharacters(in: .whitespaces)
-            let value = parts[1].trimmingCharacters(in: .whitespaces)
+            guard let (key, rawValue) = parseFrontMatterLine(line) else { continue }
+            let value = decodeFrontMatterString(rawValue)
 
             switch key {
             case "title":
@@ -183,9 +321,9 @@ class FileStorageService {
             case "id":
                 id = UUID(uuidString: value) ?? UUID()
             case "createdAt":
-                createdAt = ISO8601DateFormatter().date(from: value) ?? Date()
+                createdAt = iso8601Formatter.date(from: value) ?? Date()
             case "updatedAt":
-                updatedAt = ISO8601DateFormatter().date(from: value) ?? Date()
+                updatedAt = iso8601Formatter.date(from: value) ?? Date()
             default:
                 break
             }
@@ -200,13 +338,82 @@ class FileStorageService {
         )
     }
 
-    private func createStorageDirectoryIfNeeded() {
-        if !fileManager.fileExists(atPath: storageDirectory.path) {
-            try? fileManager.createDirectory(
-                at: storageDirectory,
+    private func splitFrontMatter(from rawContent: String) -> (frontMatter: String, content: String)? {
+        let normalized = rawContent.replacingOccurrences(of: "\r\n", with: "\n")
+        let lines = normalized.components(separatedBy: "\n")
+
+        guard lines.first == "---" else {
+            return nil
+        }
+
+        guard let closingIndex = lines.dropFirst().firstIndex(of: "---") else {
+            return nil
+        }
+
+        let frontMatterLines = Array(lines[1..<closingIndex])
+        let contentStart = lines.index(after: closingIndex)
+        var contentLines = contentStart < lines.count ? Array(lines[contentStart...]) : []
+
+        // Drop the separator blank line written between front matter and body.
+        if contentLines.first == "" {
+            contentLines.removeFirst()
+        }
+
+        return (
+            frontMatterLines.joined(separator: "\n"),
+            contentLines.joined(separator: "\n")
+        )
+    }
+
+    private func parseFrontMatterLine(_ line: String) -> (String, String)? {
+        guard let colonIndex = line.firstIndex(of: ":") else {
+            return nil
+        }
+
+        let key = line[..<colonIndex].trimmingCharacters(in: .whitespaces)
+        let valueStart = line.index(after: colonIndex)
+        let value = line[valueStart...].trimmingCharacters(in: .whitespaces)
+
+        guard !key.isEmpty else {
+            return nil
+        }
+
+        return (key, value)
+    }
+
+    private func encodeFrontMatterString(_ value: String) -> String {
+        guard let data = try? JSONEncoder().encode(value),
+              let encoded = String(data: data, encoding: .utf8) else {
+            return "\"\""
+        }
+        return encoded
+    }
+
+    private func decodeFrontMatterString(_ rawValue: String) -> String {
+        guard let data = rawValue.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode(String.self, from: data) else {
+            return rawValue
+        }
+        return decoded
+    }
+
+    private func createStorageDirectoryIfNeededLocked() throws {
+        try createStorageDirectoryIfNeeded(at: storageDirectory)
+    }
+
+    private func createStorageDirectoryIfNeeded(at directory: URL) throws {
+        if !fileManager.fileExists(atPath: directory.path) {
+            try fileManager.createDirectory(
+                at: directory,
                 withIntermediateDirectories: true,
                 attributes: nil
             )
         }
+    }
+
+    private func withStorageLock<T>(_ operation: () throws -> T) rethrows -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return try operation()
     }
 }

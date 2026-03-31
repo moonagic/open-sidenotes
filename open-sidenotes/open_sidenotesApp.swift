@@ -54,6 +54,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        NotificationCenter.default.post(name: .flushActiveNoteDraft, object: nil)
+    }
+
     private func showOnboarding() {
         onboardingWindowController = OnboardingWindowController { [weak self] in
             OnboardingManager.markOnboardingComplete()

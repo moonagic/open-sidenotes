@@ -35,11 +35,14 @@ class NoteStore: ObservableObject {
     }
 
     func updateNote(_ note: Note, title: String, content: String) async {
-        if let index = notes.firstIndex(where: { $0.id == note.id }) {
-            notes[index].title = title
-            notes[index].content = content
-            notes[index].updatedAt = Date()
-            await saveNote(notes[index])
+        if let updatedNote = applyNoteChanges(noteID: note.id, title: title, content: content) {
+            await saveNote(updatedNote)
+        }
+    }
+
+    func updateNoteImmediately(noteID: UUID, title: String, content: String) {
+        if let updatedNote = applyNoteChanges(noteID: noteID, title: title, content: content) {
+            saveNoteImmediately(updatedNote)
         }
     }
 
@@ -57,9 +60,33 @@ class NoteStore: ObservableObject {
         notes.first { $0.id == id }
     }
 
+    func clearErrorMessage() {
+        errorMessage = nil
+    }
+
+    @discardableResult
+    private func applyNoteChanges(noteID: UUID, title: String, content: String) -> Note? {
+        guard let index = notes.firstIndex(where: { $0.id == noteID }) else {
+            return nil
+        }
+
+        notes[index].title = title
+        notes[index].content = content
+        notes[index].updatedAt = Date()
+        return notes[index]
+    }
+
     private func saveNote(_ note: Note) async {
         do {
             try await fileStorage.saveNote(note)
+        } catch {
+            errorMessage = "Failed to save note: \(error.localizedDescription)"
+        }
+    }
+
+    private func saveNoteImmediately(_ note: Note) {
+        do {
+            try fileStorage.saveNoteImmediately(note)
         } catch {
             errorMessage = "Failed to save note: \(error.localizedDescription)"
         }

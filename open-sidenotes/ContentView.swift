@@ -120,10 +120,30 @@ struct ContentView: View {
                 scheduleAutoSave()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .flushActiveNoteDraft)) { _ in
+            flushPendingSaveNow()
+        }
         .task {
             await bootstrapNotes()
         }
         .background(workspaceShortcuts)
+        .alert(
+            "Storage Error",
+            isPresented: Binding(
+                get: { noteStore.errorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        noteStore.clearErrorMessage()
+                    }
+                }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                noteStore.clearErrorMessage()
+            }
+        } message: {
+            Text(noteStore.errorMessage ?? "")
+        }
     }
 
     private func openSettings() {
@@ -200,6 +220,12 @@ struct ContentView: View {
                 await noteStore.updateNote(note, title: title, content: content)
             }
         }
+    }
+
+    private func flushPendingSaveNow() {
+        saveTask?.cancel()
+        guard let noteId = editingNoteId else { return }
+        noteStore.updateNoteImmediately(noteID: noteId, title: editingTitle, content: editingContent)
     }
 
     private func scheduleAutoSave() {

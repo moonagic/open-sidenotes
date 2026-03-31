@@ -177,4 +177,5 @@ class KeyCodeTranslator {
 extension Notification.Name {
     static let dockIconSettingChanged = Notification.Name("dockIconSettingChanged")
     static let openSettingsWindow = Notification.Name("openSettingsWindow")
+    static let flushActiveNoteDraft = Notification.Name("flushActiveNoteDraft")
 }

@@ -201,6 +201,7 @@ class SideNotesWindowController: NSWindowController {
         guard let window = self.window, isShown, !isAnimating else { return }
         isShown = false
         isAnimating = true
+        NotificationCenter.default.post(name: .flushActiveNoteDraft, object: nil)
         cancelHideTimer()
         guard let visibleFrame = NSScreen.main?.visibleFrame else { return }
         NSAnimationContext.runAnimationGroup({ context in
